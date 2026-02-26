@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Bubble is a prototype web application built for learning purposes.
+Bubble is a prototype web application.
 Sprint 1 is intentionally simplified to reduce architectural complexity.
 
 ---
