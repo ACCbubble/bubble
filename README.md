@@ -17,6 +17,114 @@ npm install
 npm run dev
 ```
 
+# Frontend GET/POST Examples (Localhost)
+
+Use these patterns to build frontend features that read and write API data.
+
+> Shared setup is already done in this project: API URL in `.env.development` and shared helper in `src/api.ts`.
+
+**These examples won't work because this is not how you need to output your data and the API still needs to be written!** Base your code off them but don't expect it to function without a large overhaul.
+
+## GET example
+
+`src/pages/PollsPage.tsx`
+
+```tsx
+import { useEffect, useState } from 'react'
+import { apiGet } from '../api' // Shared GET helper
+
+type Poll = { // Shape of each item from the API
+  id: string
+  question: string
+}
+
+export function PollsPage() {
+  const [polls, setPolls] = useState<Poll[]>([]) // Data for rendering
+  const [loading, setLoading] = useState(true) // Loading UI state
+  const [error, setError] = useState('') // Error UI state
+
+  useEffect(() => {
+    // Fetch data once when page loads
+    apiGet<Poll[]>('/polls')
+      .then((result) => setPolls(result)) // Save API result into state
+      .catch(() => setError('Could not load polls.')) // Show error state
+      .finally(() => setLoading(false)) // Stop loading spinner/state
+  }, [])
+
+  if (loading) return <p>Loading...</p> // Loading UI
+  if (error) return <p>{error}</p> // Error UI
+  if (!polls.length) return <p>No polls yet.</p> // Empty UI
+
+  return (
+    <div>
+      {/* Populate page with API results */}
+      {polls.map((poll) => (
+        <p key={poll.id}>{poll.question}</p> // Render each poll
+      ))}
+    </div>
+  )
+}
+```
+
+## POST example
+
+`src/pages/CreatePollPage.tsx`
+
+```tsx
+import { FormEvent, useState } from 'react'
+import { apiPost } from '../api' // Shared POST helper
+
+type CreatedPoll = { // Shape of API response after POST
+  id: string
+  question: string
+}
+
+export function CreatePollPage() {
+  const [question, setQuestion] = useState('') // Form field state
+  const [saving, setSaving] = useState(false) // Submit/loading state
+  const [message, setMessage] = useState('') // Success/error message
+
+  // Submit handler that sends POST request
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!question.trim()) return // Basic empty check
+
+    setSaving(true)
+    setMessage('')
+
+    apiPost<CreatedPoll>('/polls', { question: question.trim() })
+      .then((created) => {
+        setQuestion('') // Clear input after success
+        setMessage(`Created: ${created.question}`) // Show success feedback
+      })
+      .catch(() => {
+        setMessage('Could not create poll.') // Show error feedback
+      })
+      .finally(() => {
+        setSaving(false) // Re-enable button
+      })
+  }
+
+  return (
+    <div>
+      <form onSubmit={onSubmit}>
+        <input
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
+          placeholder="Poll question"
+        />
+        <button type="submit" disabled={saving}>
+          {saving ? 'Saving...' : 'Create poll'}
+        </button>
+      </form>
+
+      {/* Message area for success/error */}
+      {message && <p>{message}</p>}
+    </div>
+  )
+}
+```
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
