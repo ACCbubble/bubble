@@ -1,4 +1,4 @@
-# Localhost instructions
+# Localhost Instructions
 
 ## Mac: 
 
