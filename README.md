@@ -125,6 +125,24 @@ export function CreatePollPage() {
 }
 ```
 
+## Temp - Username Assignment (Sprint 1)
+
+Sprint 1 does not enforce authentication for messaging and polls, so a temporary username flow is used to identify requests.
+
+How to use:
+
+1. Visit `/temp-username`.
+2. Enter a username and click **Save**.
+3. Refresh the page to confirm it persists.
+
+Storage details:
+
+- localStorage key: `bubble_username`
+
+Integration reminder:
+
+- All message, poll, and vote API calls should include `username` from `getUsername()` in the request body.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

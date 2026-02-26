@@ -4,6 +4,7 @@ import { MessagesPage } from './pages/MessagesPage'
 import { PollsPage } from './pages/PollsPage'
 import { SignInPage } from './pages/SignInPage'
 import { SignUpPage } from './pages/SignUpPage'
+import { TempUsernameAssignmentPage } from './pages/TempUsernameAssignment'
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <nav className="nav">
             <NavLink to="/sign-in">Sign in</NavLink>
             <NavLink to="/sign-up">Sign up</NavLink>
+            <NavLink to="/temp-username">Temp username</NavLink>
             <NavLink to="/messages">Messages</NavLink>
             <NavLink to="/polls">Polls</NavLink>
           </nav>
@@ -23,6 +25,7 @@ function App() {
             <Route path="/" element={<Navigate to="/sign-in" replace />} />
             <Route path="/sign-in" element={<SignInPage />} />
             <Route path="/sign-up" element={<SignUpPage />} />
+            <Route path="/temp-username" element={<TempUsernameAssignmentPage />} />
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/polls" element={<PollsPage />} />
           </Routes>
