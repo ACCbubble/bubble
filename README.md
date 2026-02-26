@@ -27,8 +27,6 @@ Use these patterns to build frontend features that read and write API data.
 
 ## GET example
 
-`src/pages/PollsPage.tsx`
-
 ```tsx
 import { useEffect, useState } from 'react'
 import { apiGet } from '../api' // Shared GET helper
@@ -67,8 +65,6 @@ export function PollsPage() {
 ```
 
 ## POST example
-
-`src/pages/CreatePollPage.tsx`
 
 ```tsx
 import { FormEvent, useState } from 'react'
@@ -139,9 +135,11 @@ Storage details:
 
 - localStorage key: `bubble_username`
 
-Integration reminder:
-
-- All message, poll, and vote API calls should include `username` from `getUsername()` in the request body.
+Example of use: 
+```ts
+import { getUsername } from '../lib/username'
+const username = getUsername() //Get username
+```
 
 # React + TypeScript + Vite
 
