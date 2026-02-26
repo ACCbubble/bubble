@@ -1,5 +1,9 @@
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
+import { MessagesPage } from './pages/MessagesPage'
+import { PollsPage } from './pages/PollsPage'
+import { SignInPage } from './pages/SignInPage'
+import { SignUpPage } from './pages/SignUpPage'
 
 function App() {
   return (
@@ -17,10 +21,10 @@ function App() {
         <main className="page">
           <Routes>
             <Route path="/" element={<Navigate to="/sign-in" replace />} />
-            <Route path="/sign-in" element={<h1>Sign in page</h1>} />
-            <Route path="/sign-up" element={<h1>Sign up page</h1>} />
-            <Route path="/messages" element={<h1>Messages page</h1>} />
-            <Route path="/polls" element={<h1>Polls page</h1>} />
+            <Route path="/sign-in" element={<SignInPage />} />
+            <Route path="/sign-up" element={<SignUpPage />} />
+            <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/polls" element={<PollsPage />} />
           </Routes>
         </main>
       </div>
