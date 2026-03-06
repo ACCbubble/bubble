@@ -17,6 +17,11 @@ npm install
 npm run dev
 ```
 
+
+## Week 1 execution guide
+
+If you are getting started and want a step-by-step implementation order, read `docs/week1-functional-roadmap.md`.
+
 # Frontend GET/POST Examples (Localhost)
 
 Use these patterns to build frontend features that read and write API data.
