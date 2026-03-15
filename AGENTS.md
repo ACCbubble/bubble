@@ -1,5 +1,18 @@
 # AGENTS.md
 
+## Commands
+
+```bash
+npm run dev      # Start Vite dev server (http://localhost:5173)
+npm run build    # Type-check with tsc then bundle with Vite
+npm run lint     # Run ESLint across all source files
+npm run preview  # Serve the production build locally
+```
+
+There are no tests configured yet.
+
+---
+
 ## Project Overview
 
 Bubble is a prototype web application.
