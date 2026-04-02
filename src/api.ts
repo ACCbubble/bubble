@@ -7,7 +7,8 @@ async function fetchWithRefresh(
 ): Promise<Response> {
   const res = await fetch(url, options)
 
-  if (res.status === 401 && retry) {
+  // Don't intercept 401s on auth endpoints — let the caller handle them
+  if (res.status === 401 && retry && !url.includes('/auth/')) {
     // Access token expired — attempt silent refresh using the refresh_token cookie
     const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
@@ -32,7 +33,8 @@ export async function apiGet<T>(path: string): Promise<T> {
   })
 
   if (!res.ok) {
-    throw new Error('Request failed')
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? 'Request failed')
   }
 
   return (await res.json()) as T
@@ -47,7 +49,24 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   })
 
   if (!res.ok) {
-    throw new Error('Request failed')
+    const resBody = await res.json().catch(() => ({}))
+    throw new Error((resBody as { error?: string }).error ?? 'Request failed')
+  }
+
+  return (await res.json()) as T
+}
+
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetchWithRefresh(`${API_BASE_URL}${path}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const resBody = await res.json().catch(() => ({}))
+    throw new Error((resBody as { error?: string }).error ?? 'Request failed')
   }
 
   return (await res.json()) as T

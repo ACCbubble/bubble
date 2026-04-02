@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiGet } from '../api'
-import { setActiveGroupId } from '../../../bubble-backend/src/lib/groupSelection'
 
 type Group = {
   id: number
@@ -22,7 +21,7 @@ export function GroupsPage() {
   }, [])
 
   function openGroup(groupId: number): void {
-    setActiveGroupId(groupId)
+    localStorage.setItem('activeGroupId', String(groupId))
     navigate(`/messages?groupId=${groupId}`)
   }
 
