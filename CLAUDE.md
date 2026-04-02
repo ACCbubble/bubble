@@ -41,4 +41,20 @@ There are no tests configured yet.
 ```
 VITE_API_BASE_URL=http://localhost:3000
 ```
-No additional setup needed for local development.
+
+## Local Setup
+
+```bash
+# Frontend
+npm install
+npm run dev      # http://localhost:5173
+
+# Backend (in ../bubble-backend — MUST be running for API calls to work)
+cd ../bubble-backend
+npm install
+cp .env.example .env          # set DATABASE_URL
+npx prisma migrate dev        # REQUIRED — generates Prisma client + creates tables
+npm run dev                   # http://localhost:3000
+```
+
+**CRITICAL:** The backend requires `npx prisma migrate dev` (or `npx prisma generate`) after cloning or schema changes. `npm install` alone does NOT generate the Prisma client. If "drift detected" error: `npx prisma migrate reset`.
