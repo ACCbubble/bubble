@@ -3,8 +3,12 @@
 }
 
 .header {
-  border-bottom: 1px solid #ddd;
-  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: white;
 }
 
 .nav {

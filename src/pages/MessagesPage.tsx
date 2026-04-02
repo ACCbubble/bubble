@@ -1,52 +1,91 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
 import { apiGet, apiPost } from '../api'
 
-type MessageResponse = {
-  id: number
-  content: string
-  createdAt: string
-  senderId: number
-  groupId: number
-  sender?: {
-    id: number
-    name?: string
-  }
-}
+interface User { userId: number; name: string }
+interface Group { id: number; name: string }
+interface Message { id: number; content: string; createdAt: string; sender: { id: number; name: string } }
 
-type Message = {
-  id: number
-  content: string
-  username: string
-  createdAt: string
-}
+export function MessagesPage() {
+  const [me, setMe] = useState<User | null>(null)
+  const [groups, setGroups] = useState<Group[]>([])
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [newGroupName, setNewGroupName] = useState('')
+  const [text, setText] = useState('')
+  const [error, setError] = useState('')
 
-const GROUP_ID = 1
-const SENDER_ID = 1
-const GET_MESSAGES_ENDPOINT = `/groups/${GROUP_ID}/messages`
-const POST_MESSAGE_ENDPOINT = '/messages'
-const GROUP_CHAT_NAME = 'Group Chat'
+  useEffect(() => {
+    apiGet<User>('/auth/me').then(setMe).catch(() => setError('Not logged in'))
+    apiGet<Group[]>('/groups').then(setGroups).catch(() => {})
+  }, [])
 
-function normalizeMessage(raw: MessageResponse): Message {
-  return {
-    id: raw.id,
-    content: raw.content ?? '',
-    username: raw.sender?.name ?? 'Unknown user',
-    createdAt: raw.createdAt ?? new Date().toISOString(),
-  }
-}
+  useEffect(() => {
+    if (!selectedGroup) return
+    const load = () => apiGet<Message[]>(`/groups/${selectedGroup.id}/messages`).then(setMessages).catch(() => {})
+    load()
+    const id = setInterval(load, 2000)
+    return () => clearInterval(id)
+  }, [selectedGroup])
 
-function formatDateTime(value: string): string {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
+  const createGroup = async () => {
+    if (!newGroupName.trim()) return
+    try {
+      const g = await apiPost<Group>('/groups', { name: newGroupName.trim() })
+      setGroups(prev => [...prev, g])
+      setNewGroupName('')
+      setSelectedGroup(g)
+    } catch { setError('Failed to create group') }
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
+  const sendMessage = async () => {
+    if (!text.trim() || !selectedGroup || !me) return
+    try {
+      await apiPost('/messages', { groupId: selectedGroup.id, senderId: me.userId, content: text.trim() })
+      setText('')
+      const msgs = await apiGet<Message[]>(`/groups/${selectedGroup.id}/messages`)
+      setMessages(msgs)
+    } catch { setError('Failed to send') }
+  }
+
+  return (
+    <div>
+      <p>Logged in as: {me ? me.name : '...'}</p>
+      {error && <p>Error: {error}</p>}
+
+      <hr />
+      <b>Groups</b>
+      <div>
+        {groups.map(g => (
+          <div key={g.id}>
+            <button onClick={() => setSelectedGroup(g)}>{g.name}{selectedGroup?.id === g.id ? ' (selected)' : ''}</button>
+          </div>
+        ))}
+      </div>
+      <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="new group name" />
+      <button onClick={createGroup}>Create group</button>
+
+      <hr />
+      {selectedGroup ? (
+        <div>
+          <b>#{selectedGroup.name}</b>
+          <div style={{ height: 300, overflowY: 'scroll', border: '1px solid black' }}>
+            {messages.map(m => (
+              <div key={m.id}><b>{m.sender.name}</b>: {m.content}</div>
+            ))}
+          </div>
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendMessage()}
+            placeholder="type a message"
+          />
+          <button onClick={sendMessage}>Send</button>
+        </div>
+      ) : (
+        <p>Select a group</p>
+      )}
+    </div>
+  )
 }
 
 export function MessagesPage() {
