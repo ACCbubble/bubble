@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiGet } from '../api'
-import { setActiveGroupId } from '../../../bubble-backend/src/lib/groupSelection'
+import { setActiveGroupId } from '../lib/groupSelection'
 
 type Group = {
   id: number

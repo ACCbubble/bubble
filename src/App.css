@@ -20,3 +20,70 @@
   font-weight: 700;
   text-decoration: underline;
 }
+
+/* Messages Page Styles - Andy */
+.messages-page {
+  display: grid;
+  gap: 1rem;
+  max-width: 760px;
+}
+
+.messages-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.messages-header h1 {
+  margin: 0;
+}
+
+.messages-header p {
+  margin: 0;
+  color: #666;
+}
+
+.messages-error {
+  color: #b00020;
+}
+
+.messages-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.message-card {
+  border: 1px solid #ddd;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.message-content {
+  margin: 0 0 0.6rem;
+  white-space: pre-wrap;
+}
+
+.message-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #555;
+  font-size: 0.875rem;
+}
+
+.messages-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.messages-form textarea {
+  resize: vertical;
+  min-height: 90px;
+  padding: 0.5rem;
+}
+
+.messages-form button {
+  width: fit-content;
+  padding: 0.5rem 1rem;
+}
