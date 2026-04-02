@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright (local testing only — not committed)
+playwright.config.ts
+e2e/
+test-results/
+playwright-report/

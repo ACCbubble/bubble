@@ -1,5 +1,22 @@
 # AGENTS.md
 
+## Local Setup
+
+```bash
+# Frontend
+npm install
+npm run dev      # Vite dev server on http://localhost:5173
+
+# Backend (in the bubble-backend repo — MUST be running for API calls to work)
+cd ../bubble-backend
+npm install
+cp .env.example .env          # set DATABASE_URL to a PostgreSQL connection string
+npx prisma migrate dev        # creates tables + generates Prisma client (REQUIRED)
+npm run dev                   # Fastify server on http://localhost:3000
+```
+
+**CRITICAL:** The backend requires `npx prisma migrate dev` (or `npx prisma generate`) after cloning or after any schema change. `npm install` alone does NOT generate the Prisma client — without it, Prisma models will be `undefined` at runtime. If you get a "drift detected" error, run `npx prisma migrate reset`.
+
 ## Commands
 
 ```bash
