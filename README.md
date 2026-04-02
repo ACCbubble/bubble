@@ -1,18 +1,88 @@
-# Localhost Instructions
+# bubble (frontend)
 
-## Mac: 
+React 19 + TypeScript + Vite frontend for Bubble.
 
-Run the following commands within the project directory by hitting terminal>new in your IDE and install dependencies if needed:
+## Stack
+
+- **React 19** + **TypeScript**
+- **Vite** — dev server on `http://localhost:5173`
+- **React Router 7** — client-side routing
+- **TanStack Query 5** — server state / data fetching
+
+---
+
+## Authentication
+
+Auth is fully **cookie-based** — no tokens in localStorage or JS memory. The server sets `httpOnly` cookies on login; the browser sends them automatically on every request.
+
+### Frontend auth flow
 
 ```
+Sign up   → POST /auth/register  → redirect to /sign-in
+Sign in   → POST /auth/login     → server sets cookies → redirect to /messages
+Any 401   → POST /auth/refresh   → if ok, retry original request
+           → if refresh fails    → redirect to /sign-in
+Sign out  → DELETE /auth/logout  → server clears cookies → redirect to /sign-in
+```
+
+### Making API calls
+
+Use `apiGet`, `apiPost`, and `apiDelete` from `src/api.ts`. They handle the 401 → refresh → retry cycle automatically — you never need to touch tokens directly.
+
+```ts
+import { apiGet, apiPost, apiDelete } from '../api'
+
+// GET a protected resource
+const users = await apiGet<User[]>('/users')
+
+// POST a protected resource
+const group = await apiPost<Group>('/groups', { name: 'My Group' })
+
+// Sign out
+await apiDelete('/auth/logout')
+```
+
+---
+
+## Setup
+
+```bash
+npm install
+npm run dev    # starts on http://localhost:5173
+```
+
+The API base URL is configured in `.env.development`:
+```
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+---
+
+## Scripts
+
+| Script | Description |
+|---|---|
+| `npm run dev` | Start Vite dev server |
+| `npm run build` | Type-check + bundle for production |
+| `npm run lint` | Run ESLint |
+| `npm run preview` | Preview production build locally |
+
+---
+
+## Localhost Instructions
+
+### Mac
+
+```bash
 npm install
 npm run dev
 ```
 
-## Windows:
+### Windows
 
-Open PowerShell (or Command Prompt), go to the project folder, then run:
-```
+Open PowerShell or Command Prompt in the project folder:
+
+```bash
 npm install
 npm run dev
 ```

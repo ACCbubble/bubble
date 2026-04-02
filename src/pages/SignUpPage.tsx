@@ -34,9 +34,7 @@ export const SignUpPage: React.FC = () => {
     setErr('');
 
     try {
-      const res = await apiPost('/api/auth/register', formData);
-      console.log(res);
-      // assume success (201)
+      await apiPost('/auth/register', formData);
       navigate('/sign-in', { replace: true });
     } catch (err) {
       setFormData({

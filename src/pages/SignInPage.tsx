@@ -1,9 +1,6 @@
-import { apiGet, apiPost } from '../api'
-import { getUsername } from '../lib/username'
+import { apiPost, apiDelete } from '../api'
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-export { apiGet, apiPost, getUsername }
 
 interface FormData {
   phone: string;
@@ -27,21 +24,14 @@ export const SignInPage: React.FC = () => {
     }));
   }
 
-  interface APIResponse {
-    token: string;
-    user: Object;
-  }
-
   const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setErr('');
 
     try {
-      const res: APIResponse = await apiPost('/api/auth/login', formData);
-      console.log(res);
-      // assume success (200)
+      await apiPost('/auth/login', formData);
+      // Cookies are set automatically by the server via Set-Cookie headers
       navigate('/messages', { replace: true });
-      localStorage.setItem('bubble_token',res.token);
     } catch (err) {
       setFormData({
         phone:'',
@@ -49,6 +39,11 @@ export const SignInPage: React.FC = () => {
       });
       setErr(err instanceof Error ? err.message : 'An error occurred');
     }
+  }
+
+  const handleSignOut = async () => {
+    await apiDelete('/auth/logout').catch(() => {})
+    navigate('/sign-in', { replace: true })
   }
 
   return (<>
@@ -63,5 +58,6 @@ export const SignInPage: React.FC = () => {
       <button type="submit">Submit</button>
       {err && <p>{err}</p>}
     </form>
+    <button type="button" onClick={handleSignOut}>Sign out</button>
   </>);
 }
