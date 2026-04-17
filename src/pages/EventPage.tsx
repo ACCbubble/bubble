@@ -66,9 +66,9 @@ function memberColor(userId: number) { return MEMBER_COLORS[userId % MEMBER_COLO
 
 // ─── SVG Donut Ring ───────────────────────────────────────────────────────────
 
-const SVG_SIZE = 540
+const SVG_SIZE = 560
 const CX = SVG_SIZE / 2, CY = SVG_SIZE / 2
-const OUTER = 192, INNER = 137, AVATAR_R = 248
+const OUTER = 192, INNER = 137, AVATAR_R = 234
 
 function polar(r: number, deg: number) {
   const rad = (deg - 90) * Math.PI / 180
@@ -254,11 +254,9 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           // 7px per char is generous enough for typical fonts at fontSize=9
           const nameW = Math.max(m.name.length * 7 + 18, 36)
           const nameH = 16
-          // Always place the badge directly below the avatar in screen space (higher y),
-          // then clamp x so it never clips the SVG left/right edges.
-          const nameY = pos.y + 24   // top of badge (avatar bottom + 4px gap)
-          const rawNameX = pos.x - nameW / 2
-          const nameX = Math.max(4, Math.min(SVG_SIZE - 4 - nameW, rawNameX))
+          // Always place the badge directly below the avatar and keep it centered.
+          const nameY = pos.y + 22   // top of badge (avatar bottom + 2px gap)
+          const nameX = pos.x - nameW / 2
 
           return (
             <g
@@ -285,7 +283,7 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
               >
                 {m.name[0].toUpperCase()}
               </text>
-              {/* Name badge — always below avatar in screen space, clamped to SVG bounds */}
+              {/* Name badge — centered directly under avatar */}
               <rect
                 x={nameX}
                 y={nameY}
@@ -780,7 +778,6 @@ export function EventPage() {
 
       {/* Top group header */}
       <div className="flex items-center gap-3 px-1">
-        <div className="text-xl text-slate-900 font-bold">Group Name</div>
         <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
         <button
           type="button"
@@ -821,7 +818,7 @@ export function EventPage() {
         </div>
 
         {/* Donut Ring */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600, marginTop: -10 }}>
           <DonutRing
             members={members}
             emojiMap={emojiMap}
