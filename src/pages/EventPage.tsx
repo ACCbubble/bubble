@@ -66,9 +66,9 @@ function memberColor(userId: number) { return MEMBER_COLORS[userId % MEMBER_COLO
 
 // ─── SVG Donut Ring ───────────────────────────────────────────────────────────
 
-const SVG_SIZE = 582
+const SVG_SIZE = 560
 const CX = SVG_SIZE / 2, CY = SVG_SIZE / 2
-const OUTER = 192, INNER = 137, AVATAR_R = 248
+const OUTER = 192, INNER = 137, AVATAR_R = 234
 
 function polar(r: number, deg: number) {
   const rad = (deg - 90) * Math.PI / 180
@@ -254,11 +254,9 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           // 7px per char is generous enough for typical fonts at fontSize=9
           const nameW = Math.max(m.name.length * 7 + 18, 36)
           const nameH = 16
-          // Always place the badge directly below the avatar in screen space (higher y),
-          // then clamp x so it never clips the SVG left/right edges.
-          const nameY = pos.y + 24   // top of badge (avatar bottom + 4px gap)
-          const rawNameX = pos.x - nameW / 2
-          const nameX = Math.max(4, Math.min(SVG_SIZE - 4 - nameW, rawNameX))
+          // Always place the badge directly below the avatar and keep it centered.
+          const nameY = pos.y + 22   // top of badge (avatar bottom + 2px gap)
+          const nameX = pos.x - nameW / 2
 
           return (
             <g
@@ -285,7 +283,7 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
               >
                 {m.name[0].toUpperCase()}
               </text>
-              {/* Name badge — always below avatar in screen space, clamped to SVG bounds */}
+              {/* Name badge — centered directly under avatar */}
               <rect
                 x={nameX}
                 y={nameY}
@@ -635,7 +633,8 @@ export function EventPage() {
   const [hoveredMember, setHoveredMember] = useState<number | null>(null)
   const [hoveredEmoji, setHoveredEmoji] = useState<HoveredEmoji | null>(null)
   const [hoveredStat, setHoveredStat] = useState<Status | null>(null)
-  const [currentView, setCurrentView] = useState<'suggest' | 'current'>('current')
+  const [currentView, setCurrentView] = useState<'suggest' | 'current' | 'all'>('current')
+  const [darkMode, setDarkMode] = useState(false)
   const [aiSorted, setAiSorted] = useState(true)
   const [suggestName, setSuggestName] = useState('')
   const [suggestMsg, setSuggestMsg] = useState('')
@@ -661,7 +660,7 @@ export function EventPage() {
     }).catch(() => {})
     apiGet<Group[]>('/groups').then(gs => {
       setGroups(gs)
-      if (gs.length === 1) setSelectedGroup(gs[0])
+      if (gs.length > 0) setSelectedGroup(gs[0])
     }).catch(() => {})
     fetch(`${API_BASE}/emoji-types`)
       .then(r => r.json())
@@ -754,6 +753,18 @@ export function EventPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3)
 
+  const allEventItems = groups.length > 0
+    ? groups.map(g => ({
+        id: g.id,
+        name: g.name ?? `Event ${g.id}`,
+        subtitle: g.location || 'No location yet',
+      }))
+    : [{
+        id: 0,
+        name: selectedGroup?.name ?? 'Park Hangout',
+        subtitle: selectedGroup?.location || 'Demo event',
+      }]
+
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
@@ -761,11 +772,33 @@ export function EventPage() {
       position: 'fixed', top: 52, bottom: 0,
       left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 1380,
-      overflow: 'hidden', background: '#f3f4f6', zIndex: 0,
-      display: 'flex', alignItems: 'stretch', gap: 16,
+      overflow: 'hidden',
+      background: darkMode ? '#0f172a' : '#f3f4f6',
+      filter: darkMode ? 'brightness(0.7)' : 'none',
+      transition: 'background 0.2s, filter 0.2s',
+      zIndex: 0,
+      display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 12,
       padding: 16, boxSizing: 'border-box',
     }}>
 
+      {/* Top group header */}
+      <div className="flex items-center gap-3 px-1">
+        <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
+        <button
+          type="button"
+          title="Invite members"
+          aria-label="Invite members"
+          className="ml-1 h-9 w-9 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+        >
+          👤+
+        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-slate-500 font-medium">Dark Mode</span>
+          <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
       {/* ── Left — Round Table ── */}
       <div style={{
         width: 660, flexShrink: 0, background: 'white',
@@ -784,7 +817,7 @@ export function EventPage() {
               value={selectedGroup?.id ?? ''}
               onChange={e => { const g = groups.find(g => g.id === Number(e.target.value)); if (g) setSelectedGroup(g) }}
             >
-              <option value="">Groups...</option>
+              <option value="">Select Group</option>
               {groups.map(g => (
                 <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name ?? `Group ${g.id}`}</option>
               ))}
@@ -794,7 +827,7 @@ export function EventPage() {
         </div>
 
         {/* Donut Ring */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600, marginTop: -10 }}>
           <DonutRing
             members={members}
             emojiMap={emojiMap}
@@ -843,7 +876,7 @@ export function EventPage() {
               transition: 'opacity 0.15s',
             }}
           >
-            + Suggest Event
+            + New
           </button>
           <button
             onClick={() => setCurrentView('current')}
@@ -855,7 +888,21 @@ export function EventPage() {
               transition: 'background 0.15s, color 0.15s',
             }}
           >
-            Current Events
+            Current Event
+          </button>
+          <button
+            onClick={() => setCurrentView('all')}
+            style={{
+              flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
+              background: currentView === 'all' ? '#f3f4f6' : '#f9fafb',
+              color: currentView === 'all' ? '#111827' : '#9ca3af',
+              border: 'none', cursor: 'pointer',
+              borderLeft: '1px solid #f3f4f6',
+              borderRadius: '0 24px 0 0',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            All Events
           </button>
         </div>
 
@@ -917,7 +964,7 @@ export function EventPage() {
                 <p className="text-xs text-slate-400 mt-0.5">Group Chat</p>
               </div>
               <div className="flex items-center gap-2 mt-2.5">
-                <span className="text-xs text-slate-500">AI-sorted by relevancy</span>
+                <span className="text-xs text-slate-500">For You Filter</span>
                 <Toggle on={aiSorted} onToggle={() => setAiSorted(v => !v)} />
               </div>
             </div>
@@ -962,8 +1009,35 @@ export function EventPage() {
             </div>
           </>
         )}
-      </div>
 
+        {currentView === 'all' && (
+          <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+            <h3 className="m-0 text-base font-semibold text-slate-800">All Events</h3>
+            <p className="mt-1 mb-4 text-xs text-slate-400">Select an event in this group.</p>
+            <div className="flex flex-col gap-2">
+              {allEventItems.map(event => (
+                <button
+                  key={event.id}
+                  onClick={() => {
+                    const group = groups.find(g => g.id === event.id)
+                    if (group) setSelectedGroup(group)
+                    setCurrentView('current')
+                  }}
+                  className="w-full text-left rounded-xl border px-3 py-2.5 transition-colors"
+                  style={{
+                    borderColor: selectedGroup?.id === event.id ? '#93c5fd' : '#e5e7eb',
+                    background: selectedGroup?.id === event.id ? '#eff6ff' : 'white',
+                  }}
+                >
+                  <div className="text-sm font-medium text-slate-800">{event.name}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{event.subtitle}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      </div>
     </div>
   )
 }
