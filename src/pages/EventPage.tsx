@@ -66,7 +66,7 @@ function memberColor(userId: number) { return MEMBER_COLORS[userId % MEMBER_COLO
 
 // ─── SVG Donut Ring ───────────────────────────────────────────────────────────
 
-const SVG_SIZE = 582
+const SVG_SIZE = 540
 const CX = SVG_SIZE / 2, CY = SVG_SIZE / 2
 const OUTER = 192, INNER = 137, AVATAR_R = 248
 
@@ -754,6 +754,18 @@ export function EventPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3)
 
+  const allEventItems = groups.length > 0
+    ? groups.map(g => ({
+        id: g.id,
+        name: g.name ?? `Event ${g.id}`,
+        subtitle: g.location || 'No location yet',
+      }))
+    : [{
+        id: 0,
+        name: selectedGroup?.name ?? 'Park Hangout',
+        subtitle: selectedGroup?.location || 'Demo event',
+      }]
+
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
@@ -768,8 +780,8 @@ export function EventPage() {
 
       {/* Top group header */}
       <div className="flex items-center gap-3 px-1">
-        <div className="text-sm text-slate-500 font-medium">Group Name</div>
-        <div className="text-xl text-slate-900 font-semibold">{selectedGroup?.name ?? 'Select a group'}</div>
+        <div className="text-xl text-slate-900 font-bold">Group Name</div>
+        <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
         <button
           type="button"
           title="Invite members"
@@ -799,7 +811,7 @@ export function EventPage() {
               value={selectedGroup?.id ?? ''}
               onChange={e => { const g = groups.find(g => g.id === Number(e.target.value)); if (g) setSelectedGroup(g) }}
             >
-              <option value="">Groups...</option>
+              <option value="">Select Group</option>
               {groups.map(g => (
                 <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name ?? `Group ${g.id}`}</option>
               ))}
@@ -997,20 +1009,22 @@ export function EventPage() {
             <h3 className="m-0 text-base font-semibold text-slate-800">All Events</h3>
             <p className="mt-1 mb-4 text-xs text-slate-400">Select an event in this group.</p>
             <div className="flex flex-col gap-2">
-              {groups.length === 0 ? (
-                <p className="text-sm text-slate-400">No events yet.</p>
-              ) : groups.map(g => (
+              {allEventItems.map(event => (
                 <button
-                  key={g.id}
-                  onClick={() => { setSelectedGroup(g); setCurrentView('current') }}
+                  key={event.id}
+                  onClick={() => {
+                    const group = groups.find(g => g.id === event.id)
+                    if (group) setSelectedGroup(group)
+                    setCurrentView('current')
+                  }}
                   className="w-full text-left rounded-xl border px-3 py-2.5 transition-colors"
                   style={{
-                    borderColor: selectedGroup?.id === g.id ? '#93c5fd' : '#e5e7eb',
-                    background: selectedGroup?.id === g.id ? '#eff6ff' : 'white',
+                    borderColor: selectedGroup?.id === event.id ? '#93c5fd' : '#e5e7eb',
+                    background: selectedGroup?.id === event.id ? '#eff6ff' : 'white',
                   }}
                 >
-                  <div className="text-sm font-medium text-slate-800">{g.name ?? `Event ${g.id}`}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{g.location || 'No location yet'}</div>
+                  <div className="text-sm font-medium text-slate-800">{event.name}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{event.subtitle}</div>
                 </button>
               ))}
             </div>
