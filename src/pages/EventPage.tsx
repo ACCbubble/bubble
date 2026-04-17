@@ -634,6 +634,7 @@ export function EventPage() {
   const [hoveredEmoji, setHoveredEmoji] = useState<HoveredEmoji | null>(null)
   const [hoveredStat, setHoveredStat] = useState<Status | null>(null)
   const [currentView, setCurrentView] = useState<'suggest' | 'current' | 'all'>('current')
+  const [darkMode, setDarkMode] = useState(false)
   const [aiSorted, setAiSorted] = useState(true)
   const [suggestName, setSuggestName] = useState('')
   const [suggestMsg, setSuggestMsg] = useState('')
@@ -771,7 +772,11 @@ export function EventPage() {
       position: 'fixed', top: 52, bottom: 0,
       left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 1380,
-      overflow: 'hidden', background: '#f3f4f6', zIndex: 0,
+      overflow: 'hidden',
+      background: darkMode ? '#0f172a' : '#f3f4f6',
+      filter: darkMode ? 'brightness(0.7)' : 'none',
+      transition: 'background 0.2s, filter 0.2s',
+      zIndex: 0,
       display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 12,
       padding: 16, boxSizing: 'border-box',
     }}>
@@ -787,6 +792,10 @@ export function EventPage() {
         >
           👤+
         </button>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-slate-500 font-medium">Dark Mode</span>
+          <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
