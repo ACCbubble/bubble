@@ -1,9 +1,6 @@
-import { apiGet, apiPost } from '../api'
-import { getUsername } from '../lib/username'
+import { apiPost } from '../api'
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-export { apiGet, apiPost, getUsername }
 
 interface FormData {
   name: string;

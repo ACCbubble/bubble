@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { apiGet, apiPatch, apiPost } from '../api'
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
+import { apiGet, apiPost } from '../api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 
@@ -11,13 +11,39 @@ export interface Event {
   id: number; groupId: number; name: string
   location: string | null; eventTime: string | null; description: string | null
 }
-export interface EmojiType { id: number; name: string; emoji: string }
-export interface RtEmoji { emojiId: number; score: number; topQuotes: string[] }
-export interface RtMember { userId: number; name: string; emojis: RtEmoji[] }
-export interface Roundtable { members: RtMember[] }
-export interface PollOption { id: number; optionText: string | null; voteCount: number; percentage: number; selectedByViewer: boolean }
-export interface Poll { id: number; question: string | null; options: PollOption[]; isActive: boolean; allowsMultiple: boolean; allowsSuggestions: boolean; totalVoters: number; viewerVoteOptionIds: number[] }
-export interface Message { id: number; content: string; createdAt: string; sender: { id: number; name: string }; isAutoPoll?: boolean; poll?: Poll }
+interface EmojiType { id: number; name: string; emoji: string }
+interface RtEmoji { emojiId: number; score: number; topQuotes: string[] }
+interface RtMember { userId: number; name: string; emojis: RtEmoji[] }
+interface Roundtable { members: RtMember[] }
+interface PollOption {
+  id: number
+  optionText: string | null
+  voteCount: number
+  percentage: number
+  selectedByViewer: boolean
+}
+interface PollState {
+  id: number
+  eventId: number | null
+  userId: number | null
+  question: string | null
+  createdAt: string | null
+  expiresAt: string | null
+  isActive: boolean
+  isExpired: boolean
+  allowsMultiple: boolean
+  totalVoters: number
+  viewerVoteOptionIds: number[]
+  options: PollOption[]
+}
+interface Message {
+  id: number
+  content: string
+  createdAt: string
+  sender: { id: number; name: string }
+  isAutoPoll?: boolean
+  poll?: PollState | null
+}
 interface FeedMessage extends Message { relevanceScore: number }
 interface UserAttribute { key: string; score: number }
 
@@ -438,13 +464,8 @@ export function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-export function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
+function EventDetails({ event, darkMode }: { event: Event | null; darkMode: boolean }) {
   const c = th(darkMode)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-
-  function startEdit(field: string, current: string) { setEditing(field); setDraft(current) }
-  function save(field: string) { onEdit(field, draft); setEditing(null) }
 
   const formatted = event?.eventTime
     ? new Date(event.eventTime).toLocaleDateString('en-US', {
@@ -453,28 +474,27 @@ export function EventDetails({ event, onEdit, darkMode }: { event: Event | null;
       })
     : null
 
-  const fieldText: React.CSSProperties = { color: c.text, fontSize: 13, cursor: 'pointer', transition: 'color 0.15s' }
+  const fieldText: React.CSSProperties = { color: c.text, fontSize: 13 }
   const placeholder: React.CSSProperties = { color: c.textFaint, fontStyle: 'italic', fontSize: 12 }
-  const editInput: React.CSSProperties = { flex: 1, borderBottom: `1.5px solid #60a5fa`, outline: 'none', fontSize: 13, background: 'transparent', color: c.text }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📍</span>
-        <span style={{ ...fieldText, cursor: 'default' }}>
-          {event?.location ?? <span style={placeholder}>Location decided by poll</span>}
+        <span style={fieldText}>
+          {event?.location ?? <span style={placeholder}>Location will be chosen by poll…</span>}
         </span>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>🕐</span>
-        <span style={{ ...fieldText, cursor: 'default' }}>
-          {formatted ?? <span style={placeholder}>Date & time decided by poll</span>}
+        <span style={fieldText}>
+          {formatted ?? <span style={placeholder}>Date and time will be chosen by poll…</span>}
         </span>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📄</span>
-        <span style={{ ...fieldText, lineHeight: 1.5, cursor: 'default' }}>
-          {event?.description ?? <span style={placeholder}>Description decided by poll</span>}
+        <span style={{ ...fieldText, lineHeight: 1.5 }}>
+          {event?.description ?? <span style={placeholder}>Activity description will be chosen by poll…</span>}
         </span>
       </div>
     </div>
@@ -632,15 +652,228 @@ export interface MessageItemProps {
   msg: Message
   meId: number | null
   compact?: boolean
+  votingPollId?: number | null
+  onVotePoll?: (pollId: number, selectedOptionIds: number[]) => Promise<void>
   darkMode: boolean
 }
 
-export function MessageItem({ msg, meId, compact = false, darkMode }: MessageItemProps) {
+function PollCard({
+  poll,
+  compact,
+  disabled,
+  isAutoPoll,
+  isMine,
+  isSaving,
+  darkMode,
+  onVote,
+}: {
+  poll: PollState
+  compact: boolean
+  disabled: boolean
+  isAutoPoll: boolean
+  isMine: boolean
+  isSaving: boolean
+  darkMode: boolean
+  onVote: (selectedOptionIds: number[]) => Promise<void>
+}) {
+  const c = th(darkMode)
+  const [draftSelection, setDraftSelection] = useState<number[]>(poll.viewerVoteOptionIds)
+
+  function toggleOption(optionId: number) {
+    if (disabled || isSaving || !poll.isActive) return
+
+    if (!poll.allowsMultiple) {
+      void onVote([optionId])
+      return
+    }
+
+    setDraftSelection((current) =>
+      current.includes(optionId)
+        ? current.filter((id) => id !== optionId)
+        : [...current, optionId],
+    )
+  }
+
+  const hasDraftChanges =
+    draftSelection.length !== poll.viewerVoteOptionIds.length ||
+    draftSelection.some((id) => !poll.viewerVoteOptionIds.includes(id))
+
+  return (
+    <div
+      style={{
+        width: compact ? '100%' : 'min(100%, 520px)',
+        background: isMine
+          ? (darkMode ? 'linear-gradient(180deg, #13233d 0%, #162b47 100%)' : 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)')
+          : c.panelBg,
+        border: `1px solid ${isMine ? '#60a5fa' : c.border}`,
+        borderRadius: 18,
+        padding: compact ? '10px 12px' : '14px 16px',
+        boxShadow: darkMode ? '0 6px 18px rgba(2,6,23,0.35)' : '0 6px 18px rgba(15,23,42,0.07)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: isAutoPoll ? '#a78bfa' : '#2563eb',
+            background: isAutoPoll ? (darkMode ? 'rgba(124,58,237,0.18)' : '#f3e8ff') : (darkMode ? 'rgba(37,99,235,0.16)' : '#eff6ff'),
+            borderRadius: 999,
+            padding: '3px 8px',
+          }}
+        >
+          {isAutoPoll ? 'Auto Poll' : 'Poll'}
+        </span>
+        <span style={{ fontSize: 11, color: c.textSub }}>
+          {poll.allowsMultiple ? 'Pick one or more' : 'Pick one'}
+        </span>
+        <span style={{ fontSize: 11, color: c.textSub }}>
+          {poll.totalVoters} {poll.totalVoters === 1 ? 'voter' : 'voters'}
+        </span>
+        {!poll.isActive && (
+          <span style={{ fontSize: 11, color: '#b45309', background: darkMode ? 'rgba(245,158,11,0.18)' : '#fffbeb', borderRadius: 999, padding: '3px 8px' }}>
+            {poll.isExpired ? 'Expired' : 'Closed'}
+          </span>
+        )}
+      </div>
+
+      <div style={{ fontSize: compact ? 13 : 15, fontWeight: 700, color: c.text, marginBottom: 10 }}>
+        {poll.question}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {poll.options.map((option) => {
+          const selected = poll.allowsMultiple
+            ? draftSelection.includes(option.id)
+            : option.selectedByViewer
+
+          return (
+            <button
+              key={option.id}
+              type="button"
+              disabled={disabled || isSaving || !poll.isActive}
+              onClick={() => toggleOption(option.id)}
+              style={{
+                border: selected ? '1.5px solid #60a5fa' : `1px solid ${c.border}`,
+                background: selected ? (darkMode ? 'rgba(37,99,235,0.18)' : '#eff6ff') : c.panelBg2,
+                borderRadius: 14,
+                padding: '10px 12px',
+                cursor: disabled || isSaving || !poll.isActive ? 'not-allowed' : 'pointer',
+                textAlign: 'left',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: `${option.percentage}%`,
+                  background: selected ? 'rgba(96,165,250,0.18)' : 'rgba(148,163,184,0.10)',
+                }}
+              />
+              <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{option.optionText}</div>
+                  {option.selectedByViewer && (
+                    <div style={{ fontSize: 11, color: '#2563eb', marginTop: 2 }}>Your vote</div>
+                  )}
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{option.percentage}%</div>
+                  <div style={{ fontSize: 11, color: c.textSub }}>{option.voteCount} votes</div>
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {poll.allowsMultiple && poll.isActive && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={() => void onVote(draftSelection)}
+            disabled={disabled || isSaving || !hasDraftChanges}
+            style={{
+              border: 'none',
+              borderRadius: 999,
+              background: GRAD,
+              color: 'white',
+              fontSize: 12,
+              fontWeight: 700,
+              padding: '8px 14px',
+              cursor: disabled || isSaving || !hasDraftChanges ? 'not-allowed' : 'pointer',
+              opacity: disabled || isSaving || !hasDraftChanges ? 0.6 : 1,
+            }}
+          >
+            {isSaving ? 'Saving…' : 'Save vote'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDraftSelection(poll.viewerVoteOptionIds)}
+            disabled={disabled || isSaving || !hasDraftChanges}
+            style={{
+              border: `1px solid ${c.border}`,
+              borderRadius: 999,
+              background: c.panelBg,
+              color: c.textSub,
+              fontSize: 12,
+              fontWeight: 600,
+              padding: '8px 14px',
+              cursor: disabled || isSaving || !hasDraftChanges ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Reset
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePoll, darkMode }: MessageItemProps) {
   const c = th(darkMode)
   const isMe = msg.sender.id === meId
   const color = memberColor(msg.sender.id)
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   const fontSize = compact ? 12 : 15
+  const poll = msg.poll
+
+  if (poll) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 4 }}>
+        {!compact && (
+          <span style={{ fontSize: 11, fontWeight: 600, color, marginLeft: isMe ? 0 : 40, marginRight: isMe ? 8 : 0 }}>
+            {msg.sender.name}
+          </span>
+        )}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexDirection: isMe ? 'row-reverse' : 'row' }}>
+          {!compact && (
+            <div style={{
+              flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
+              background: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontSize: 11, fontWeight: 700,
+            }}>
+              {msg.sender.name[0].toUpperCase()}
+            </div>
+          )}
+          <PollCard
+            key={`${poll.id}:${poll.viewerVoteOptionIds.join(',')}`}
+            poll={poll}
+            compact={compact}
+            disabled={meId === null}
+            isAutoPoll={Boolean(msg.isAutoPoll)}
+            isMine={isMe}
+            isSaving={votingPollId === poll.id}
+            darkMode={darkMode}
+            onVote={(selectedOptionIds) => onVotePoll ? onVotePoll(poll.id, selectedOptionIds) : Promise.resolve()}
+          />
+        </div>
+        <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: isMe ? 0 : 40, marginRight: isMe ? 4 : 0 }}>{time}</span>
+      </div>
+    )
+  }
 
   // Auto-poll messages render as poll cards
   if (msg.isAutoPoll && msg.poll && !compact) {
@@ -828,7 +1061,15 @@ export function EventPage() {
   const [suggestMsg, setSuggestMsg] = useState('')
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState('')
+  const [showPollComposer, setShowPollComposer] = useState(false)
+  const [pollQuestion, setPollQuestion] = useState('')
+  const [pollOptions, setPollOptions] = useState(['', ''])
+  const [pollAllowsMultiple, setPollAllowsMultiple] = useState(false)
+  const [pollError, setPollError] = useState('')
+  const [creatingPoll, setCreatingPoll] = useState(false)
+  const [votingPollId, setVotingPollId] = useState<number | null>(null)
   const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupInitialMessage, setNewGroupInitialMessage] = useState('')
   const [newGroupLoading, setNewGroupLoading] = useState(false)
   const [newGroupError, setNewGroupError] = useState('')
   const [smallView, setSmallView] = useState<'roundtable' | 'chat'>('chat')
@@ -837,11 +1078,7 @@ export function EventPage() {
   const inviteRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const messagesContainerRef = useRef<HTMLDivElement>(null)
-  // Refs so WebSocket closure always reads current values without needing to re-subscribe
-  const aiSortedRef = useRef(aiSorted)
-  const meRef = useRef(me)
-  const feedReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const viewerId = me?.userId ?? null
 
   useLayoutEffect(() => {
     const onResize = () => setWindowWidth(window.innerWidth)
@@ -914,79 +1151,54 @@ export function EventPage() {
   // Load events when group changes, restore last selected event
   useEffect(() => {
     if (!selectedGroup) return
-    localStorage.setItem('bubble_groupId', String(selectedGroup.id))
-    setEvents([])
-    setSelectedEvent(null)
     apiGet<Event[]>(`/groups/${selectedGroup.id}/events`).then(evts => {
       setEvents(evts)
-      if (evts.length === 0) return
-      const savedEventId = Number(localStorage.getItem('bubble_eventId'))
-      const restored = savedEventId ? evts.find(e => e.id === savedEventId) : null
-      setSelectedEvent(restored ?? evts[0])
+      if (evts.length > 0) setSelectedEvent(evts[0])
+      else setSelectedEvent(null)
     }).catch(() => {})
   }, [selectedGroup])
 
   // Load roundtable, messages, websocket when event changes
+  async function loadSelectedEventData(event = selectedEvent, currentViewerId = viewerId) {
+    if (!event) return
+
+    const loadEvent = apiGet<Event>(`/events/${event.id}`).then((freshEvent) => {
+      setSelectedEvent(freshEvent)
+      setEvents((current) => current.map((candidate) => candidate.id === freshEvent.id ? freshEvent : candidate))
+    }).catch(() => {})
+    const loadRT = apiGet<Roundtable>(`/roundtable?eventId=${event.id}`).then(setRoundtable).catch(() => {})
+    const loadMsgs = apiGet<Message[]>(
+      `/events/${event.id}/messages${currentViewerId ? `?viewerUserId=${currentViewerId}` : ''}`,
+    ).then(setMessages).catch(() => {})
+    const loadFeed = currentViewerId
+      ? apiGet<FeedMessage[]>(`/events/${event.id}/feed?userId=${currentViewerId}`).then(setFeedMessages).catch(() => {})
+      : Promise.resolve()
+
+    await Promise.all([loadEvent, loadRT, loadMsgs, loadFeed])
+  }
+
+  const refreshSelectedEventData = useEffectEvent((event = selectedEvent, currentViewerId = viewerId) => {
+    void loadSelectedEventData(event, currentViewerId)
+  })
+
   useEffect(() => {
     if (!selectedEvent) return
     const eid = selectedEvent.id
+    const refreshData = () => { void refreshSelectedEventData(selectedEvent, viewerId) }
 
-    const loadRT = () => apiGet<Roundtable>(`/roundtable?eventId=${eid}`).then(setRoundtable).catch(() => {})
-    const loadMsgs = () => apiGet<Message[]>(`/events/${eid}/messages`).then(setMessages).catch(() => {})
-    const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/events/${eid}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
-
-    const scheduleFeedReload = (delayMs: number) => {
-      if (feedReloadTimerRef.current) clearTimeout(feedReloadTimerRef.current)
-      feedReloadTimerRef.current = setTimeout(() => {
-        const uid = meRef.current?.userId
-        if (uid) loadFeed(uid)
-      }, delayMs)
-    }
-
-    loadRT(); loadMsgs()
-    if (me) loadFeed(me.userId)
+    refreshData()
 
     const wsUrl = API_BASE.replace(/^http/, 'ws')
     const ws = new WebSocket(`${wsUrl}?eventId=${eid}`)
     wsRef.current = ws
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data)
-      const uid = meRef.current?.userId
-
-      if (data.type === 'context_updated') {
-        loadRT()
-        scheduleFeedReload(1500)
-      }
-
-      if (data.type === 'new_message') {
-        setMessages(prev => [...prev, data.message])
-        if (aiSortedRef.current) {
-          // In relevancy mode: debounce feed reload so reordering doesn't jump the view
-          scheduleFeedReload(3000)
-        } else {
-          if (uid) loadFeed(uid)
-        }
-      }
-
-      if (data.type === 'poll_updated') {
-        const pollId = data.pollId as number
-        apiGet<Poll>(`/polls/${pollId}/results${uid ? `?userId=${uid}` : ''}`).then(updatedPoll => {
-          // Patch in-place in both lists — no full reload, no scroll
-          setMessages(prev => prev.map(m => m.poll?.id === pollId ? { ...m, poll: updatedPoll } : m))
-          setFeedMessages(prev => prev.map(m => m.poll?.id === pollId ? { ...m, poll: updatedPoll } : m))
-        }).catch(() => {})
-        // Reload event so location/time/description fields update from poll winner sync
-        apiGet<Event>(`/events/${eid}`).then(updated => {
-          setSelectedEvent(updated)
-          setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
-        }).catch(() => {})
+      if (data.type === 'context_updated' || data.type === 'new_message' || data.type === 'poll_updated') {
+        refreshData()
       }
     }
-    return () => {
-      ws.close()
-      if (feedReloadTimerRef.current) clearTimeout(feedReloadTimerRef.current)
-    }
-  }, [selectedEvent])
+    return () => { ws.close() }
+  }, [selectedEvent, viewerId])
 
   // Snap to bottom on event switch, initial load, or filter toggle
   const prevEventIdRef = useRef<number | null>(null)
@@ -1023,24 +1235,17 @@ export function EventPage() {
     } catch { /* silent */ }
   }
 
-  const updateEventField = async (field: string, value: string) => {
-    if (!selectedEvent) return
-    try {
-      const updated = await apiPatch<Event>(`/events/${selectedEvent.id}`, { [field]: value })
-      setSelectedEvent(updated)
-      setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
-    } catch { /* silent */ }
-  }
-
   const handleCreateGroup = async () => {
     if (!newGroupName.trim() || !me) { setNewGroupError('Enter a group name.'); return }
     setNewGroupLoading(true)
     setNewGroupError('')
     try {
-      const group = await apiPost<Group>('/groups', { name: newGroupName.trim() })
+      const group = await apiPost<Group>('/groups', { name: newGroupName.trim(), initialMessage: newGroupInitialMessage.trim() })
       setGroups(prev => [...prev, group])
       setSelectedGroup(group)
       setNewGroupName('')
+      setNewGroupInitialMessage('')
+      setCurrentView('current')
     } catch (err: unknown) {
       setNewGroupError((err as Error)?.message ?? 'Failed to create group.')
     }
@@ -1070,6 +1275,58 @@ export function EventPage() {
       setSuggestError((err as Error)?.message ?? 'Failed to create event.')
     }
     setSuggestLoading(false)
+  }
+
+  const handleCreatePoll = async () => {
+    if (!selectedEvent || !me || viewerId === null) return
+
+    const trimmedQuestion = pollQuestion.trim()
+    const trimmedOptions = pollOptions.map((option) => option.trim()).filter(Boolean)
+
+    if (!trimmedQuestion) {
+      setPollError('Poll question is required.')
+      return
+    }
+
+    if (trimmedOptions.length < 2) {
+      setPollError('Add at least two options.')
+      return
+    }
+
+    setCreatingPoll(true)
+    setPollError('')
+    try {
+      await apiPost(`/events/${selectedEvent.id}/polls`, {
+        userId: viewerId,
+        question: trimmedQuestion,
+        options: trimmedOptions,
+        allowsMultiple: pollAllowsMultiple,
+      })
+      setPollQuestion('')
+      setPollOptions(['', ''])
+      setPollAllowsMultiple(false)
+      setShowPollComposer(false)
+      await loadSelectedEventData(selectedEvent, viewerId)
+    } catch (err) {
+      setPollError(err instanceof Error ? err.message : 'Failed to create poll.')
+    }
+    setCreatingPoll(false)
+  }
+
+  const handleVotePoll = async (pollId: number, selectedOptionIds: number[]) => {
+    if (!me || !selectedEvent || viewerId === null) return
+
+    setVotingPollId(pollId)
+    try {
+      await apiPost(`/polls/${pollId}/votes`, {
+        userId: viewerId,
+        optionIds: selectedOptionIds,
+      })
+      await loadSelectedEventData(selectedEvent, viewerId)
+    } catch {
+      // keep silent to avoid noisy chat UI
+    }
+    setVotingPollId(null)
   }
 
   // ── Derived ──
@@ -1268,7 +1525,7 @@ export function EventPage() {
 
         {/* Event Details */}
         <div style={{ marginTop: 4, padding: '0 4px' }}>
-          <EventDetails event={selectedEvent} onEdit={updateEventField} darkMode={darkMode} />
+          <EventDetails event={selectedEvent} darkMode={darkMode} />
         </div>
       </div>}
 
@@ -1352,6 +1609,15 @@ export function EventPage() {
                   {newGroupLoading ? '…' : 'Create'}
                 </button>
               </div>
+              <textarea
+                value={newGroupInitialMessage}
+                onChange={e => setNewGroupInitialMessage(e.target.value)}
+                placeholder="Initial message. Ask questions here and Bubble will turn missing details into polls."
+                rows={4}
+                style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 12px', fontSize: 13, color: c.text, outline: 'none', background: c.inputBg, resize: 'none', fontFamily: 'inherit' }}
+                onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#93c5fd' }}
+                onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = c.border }}
+              />
               {newGroupError && <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{newGroupError}</p>}
               {!me && <p style={{ margin: 0, fontSize: 12, color: c.textFaint }}>Sign in to create a group.</p>}
             </div>
@@ -1437,7 +1703,14 @@ export function EventPage() {
                 : displayMessages.length === 0
                   ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>No messages yet</p>
                   : displayMessages.map(msg => (
-                      <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} darkMode={darkMode} />
+                      <MessageItem
+                        key={msg.id}
+                        msg={msg}
+                        meId={me?.userId ?? null}
+                        votingPollId={votingPollId}
+                        onVotePoll={handleVotePoll}
+                        darkMode={darkMode}
+                      />
                     ))
               }
               <div ref={messagesEndRef} />
@@ -1453,6 +1726,87 @@ export function EventPage() {
             )}
 
             <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', borderTop: `1px solid ${c.border}` }}>
+              {showPollComposer && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    right: 20,
+                    bottom: 72,
+                    width: 320,
+                    background: c.panelBg,
+                    border: `1px solid ${c.border}`,
+                    borderRadius: 18,
+                    padding: 16,
+                    boxShadow: darkMode ? '0 18px 40px rgba(2,6,23,0.45)' : '0 18px 40px rgba(15,23,42,0.16)',
+                    zIndex: 20,
+                  }}
+                >
+                  <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 10 }}>Create Poll</div>
+                  <input
+                    value={pollQuestion}
+                    onChange={(e) => setPollQuestion(e.target.value)}
+                    placeholder="Question"
+                    style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${c.border}`, borderRadius: 12, padding: '10px 12px', fontSize: 13, marginBottom: 10, background: c.inputBg, color: c.text }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {pollOptions.map((option, index) => (
+                      <input
+                        key={index}
+                        value={option}
+                        onChange={(e) => setPollOptions((current) => current.map((value, i) => i === index ? e.target.value : value))}
+                        placeholder={`Option ${index + 1}`}
+                        style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${c.border}`, borderRadius: 12, padding: '9px 12px', fontSize: 13, background: c.inputBg, color: c.text }}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    {pollOptions.length < 4 && (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions((current) => [...current, ''])}
+                        style={{ border: `1px solid ${c.border}`, background: c.panelBg, borderRadius: 999, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: c.textSub, cursor: 'pointer' }}
+                      >
+                        + Option
+                      </button>
+                    )}
+                    {pollOptions.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions((current) => current.slice(0, -1))}
+                        style={{ border: `1px solid ${c.border}`, background: c.panelBg, borderRadius: 999, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: c.textSub, cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: c.textSub }}>
+                    <input
+                      type="checkbox"
+                      checked={pollAllowsMultiple}
+                      onChange={(e) => setPollAllowsMultiple(e.target.checked)}
+                    />
+                    Allow multiple answers
+                  </label>
+                  {pollError && <div style={{ fontSize: 12, color: '#dc2626', marginTop: 8 }}>{pollError}</div>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+                    <button
+                      type="button"
+                      onClick={() => { setShowPollComposer(false); setPollError('') }}
+                      style={{ border: `1px solid ${c.border}`, background: c.panelBg, borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 600, color: c.textSub, cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreatePoll}
+                      disabled={creatingPoll || !selectedEvent}
+                      style={{ border: 'none', background: GRAD, color: 'white', borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: creatingPoll || !selectedEvent ? 'not-allowed' : 'pointer', opacity: creatingPoll || !selectedEvent ? 0.7 : 1 }}
+                    >
+                      {creatingPoll ? 'Creating…' : 'Post poll'}
+                    </button>
+                  </div>
+                </div>
+              )}
               <input
                 style={{ flex: 1, borderRadius: 20, padding: '8px 16px', fontSize: 14, outline: 'none', background: c.inputBg, border: 'none', color: c.text }}
                 placeholder={selectedEvent && me ? 'Type a message...' : selectedEvent ? 'Sign in to send messages' : 'Select an event first'}
@@ -1461,6 +1815,17 @@ export function EventPage() {
                 onChange={e => setText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
               />
+              <button
+                type="button"
+                onClick={() => setShowPollComposer((current) => !current)}
+                className="flex-shrink-0 rounded-full"
+                disabled={!selectedEvent || !me}
+                style={{ width: 38, height: 38, border: `1px solid ${c.border}`, background: c.panelBg, cursor: !selectedEvent || !me ? 'not-allowed' : 'pointer', fontSize: 16, color: c.textSub, opacity: !selectedEvent || !me ? 0.5 : 1 }}
+                title="Create poll"
+                aria-label="Create poll"
+              >
+                ☑
+              </button>
               <button
                 onClick={sendMessage}
                 disabled={!selectedEvent || !me}
