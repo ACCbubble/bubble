@@ -8,6 +8,11 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 interface Me { userId: number; name: string }
 interface Group {
   id: number; name: string | null
+}
+interface Event {
+  id: number
+  groupId: number
+  name: string | null
   location: string | null; eventTime: string | null; description: string | null
 }
 interface EmojiType { id: number; name: string; emoji: string }
@@ -452,15 +457,15 @@ function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: string, value: string) => void }) {
+function EventDetails({ event, onEdit }: { event: Event | null; onEdit: (field: string, value: string) => void }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
   function startEdit(field: string, current: string) { setEditing(field); setDraft(current) }
   function save(field: string) { onEdit(field, draft); setEditing(null) }
 
-  const formatted = group?.eventTime
-    ? new Date(group.eventTime).toLocaleDateString('en-US', {
+  const formatted = event?.eventTime
+    ? new Date(event.eventTime).toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
         hour: 'numeric', minute: '2-digit',
       })
@@ -476,8 +481,8 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
             onBlur={() => save('location')} onKeyDown={e => e.key === 'Enter' && save('location')} />
         ) : (
           <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('location', group?.location ?? '')}>
-            {group?.location ?? <span className="text-slate-300 italic text-xs">Add location…</span>}
+            onClick={() => startEdit('location', event?.location ?? '')}>
+            {event?.location ?? <span className="text-slate-300 italic text-xs">Add location…</span>}
           </span>
         )}
       </div>
@@ -488,7 +493,7 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
         ) : (
           <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('eventTime', group?.eventTime ? group.eventTime.slice(0, 16) : '')}>
+            onClick={() => startEdit('eventTime', event?.eventTime ? event.eventTime.slice(0, 16) : '')}>
             {formatted ?? <span className="text-slate-300 italic text-xs">Add date & time…</span>}
           </span>
         )}
@@ -500,8 +505,8 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
         ) : (
           <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors leading-snug"
-            onClick={() => startEdit('description', group?.description ?? '')}>
-            {group?.description ?? <span className="text-slate-300 italic text-xs">Add description…</span>}
+            onClick={() => startEdit('description', event?.description ?? '')}>
+            {event?.description ?? <span className="text-slate-300 italic text-xs">Add description…</span>}
           </span>
         )}
       </div>
@@ -623,7 +628,9 @@ const RELEVANCE_THRESHOLD = 0.05
 export function EventPage() {
   const [me, setMe] = useState<Me | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
+  const [events, setEvents] = useState<Event[]>([])
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [emojiMap, setEmojiMap] = useState<Record<number, EmojiType>>(MOCK_EMOJI_MAP)
   const [roundtable, setRoundtable] = useState<Roundtable>(MOCK_ROUNDTABLE)
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES)
@@ -670,15 +677,29 @@ export function EventPage() {
 
   useEffect(() => {
     if (!selectedGroup) return
-    const loadRT = () => apiGet<Roundtable>(`/roundtable?groupId=${selectedGroup.id}`).then(setRoundtable).catch(() => {})
-    const loadMsgs = () => apiGet<Message[]>(`/groups/${selectedGroup.id}/messages`).then(setMessages).catch(() => {})
-    const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/groups/${selectedGroup.id}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
+
+    apiGet<Event[]>(`/groups/${selectedGroup.id}/events`)
+      .then(nextEvents => {
+        setEvents(nextEvents)
+        setSelectedEvent(prev => (prev && nextEvents.some(e => e.id === prev.id) ? prev : (nextEvents[0] ?? null)))
+      })
+      .catch(() => {
+        setEvents([])
+        setSelectedEvent(null)
+      })
+  }, [selectedGroup])
+
+  useEffect(() => {
+    if (!selectedEvent) return
+    const loadRT = () => apiGet<Roundtable>(`/roundtable?eventId=${selectedEvent.id}`).then(setRoundtable).catch(() => {})
+    const loadMsgs = () => apiGet<Message[]>(`/events/${selectedEvent.id}/messages`).then(setMessages).catch(() => {})
+    const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/events/${selectedEvent.id}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
 
     loadRT(); loadMsgs()
     if (me) loadFeed(me.userId)
 
     const wsUrl = API_BASE.replace(/^http/, 'ws')
-    const ws = new WebSocket(`${wsUrl}?groupId=${selectedGroup.id}`)
+    const ws = new WebSocket(`${wsUrl}?eventId=${selectedEvent.id}`)
     wsRef.current = ws
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data)
@@ -686,28 +707,32 @@ export function EventPage() {
       if (data.type === 'new_message') { setMessages(prev => [...prev, data.message]); if (me) loadFeed(me.userId) }
     }
     return () => { ws.close() }
-  }, [selectedGroup])
+  }, [selectedEvent, me])
 
   useEffect(() => {
     if (!aiSorted) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, aiSorted])
 
   const sendMessage = async () => {
-    if (!text.trim() || !selectedGroup || !me) return
-    try { await apiPost('/messages', { groupId: selectedGroup.id, senderId: me.userId, content: text.trim() }); setText('') }
+    if (!text.trim() || !selectedEvent || !me) return
+    try { await apiPost('/messages', { eventId: selectedEvent.id, senderId: me.userId, content: text.trim() }); setText('') }
     catch { /* silent */ }
   }
 
-  const updateGroupField = async (field: string, value: string) => {
-    if (!selectedGroup) return
+  const updateEventField = async (field: string, value: string) => {
+    if (!selectedEvent) return
     try {
-      const updated = await apiPatch<Group>(`/groups/${selectedGroup.id}`, { [field]: value })
-      setSelectedGroup(updated)
-      setGroups(prev => prev.map(g => g.id === updated.id ? updated : g))
+      const updated = await apiPatch<Event>(`/events/${selectedEvent.id}`, { [field]: value })
+      setSelectedEvent(updated)
+      setEvents(prev => prev.map(event => event.id === updated.id ? updated : event))
     } catch { /* silent */ }
   }
 
   const handleSuggestEvent = async () => {
+    if (!selectedGroup) {
+      setSuggestError('Please select a group first.')
+      return
+    }
     if (!suggestName.trim() || !suggestMsg.trim() || !me) {
       setSuggestError('Please fill in both fields.')
       return
@@ -715,10 +740,10 @@ export function EventPage() {
     setSuggestLoading(true)
     setSuggestError('')
     try {
-      const group = await apiPost<Group>('/groups', { name: suggestName.trim() })
-      await apiPost('/messages', { groupId: group.id, senderId: me.userId, content: suggestMsg.trim() })
-      setGroups(prev => [...prev, group])
-      setSelectedGroup(group)
+      const event = await apiPost<Event>('/events', { groupId: selectedGroup.id, name: suggestName.trim() })
+      await apiPost('/messages', { eventId: event.id, senderId: me.userId, content: suggestMsg.trim() })
+      setEvents(prev => [...prev, event])
+      setSelectedEvent(event)
       setCurrentView('current')
       setSuggestName('')
       setSuggestMsg('')
@@ -753,16 +778,16 @@ export function EventPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3)
 
-  const allEventItems = groups.length > 0
-    ? groups.map(g => ({
-        id: g.id,
-        name: g.name ?? `Event ${g.id}`,
-        subtitle: g.location || 'No location yet',
+  const allEventItems = events.length > 0
+    ? events.map(event => ({
+        id: event.id,
+        name: event.name ?? `Event ${event.id}`,
+        subtitle: event.location || 'No location yet',
       }))
     : [{
         id: 0,
-        name: selectedGroup?.name ?? 'Park Hangout',
-        subtitle: selectedGroup?.location || 'Demo event',
+        name: selectedEvent?.name ?? 'Park Hangout',
+        subtitle: selectedEvent?.location || 'Demo event',
       }]
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -781,17 +806,28 @@ export function EventPage() {
       padding: 16, boxSizing: 'border-box',
     }}>
 
-      {/* Top group header */}
+      {/* Top header */}
       <div className="flex items-center gap-3 px-1">
-        <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
-        <button
-          type="button"
-          title="Invite members"
-          aria-label="Invite members"
-          className="ml-1 h-9 w-9 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-        >
-          👤+
-        </button>
+        <div className="relative">
+          <select
+            className="appearance-none pl-4 pr-8 py-1.5 text-sm text-white rounded-full cursor-pointer"
+            style={{ background: GRAD, border: 'none', outline: 'none' }}
+            value={selectedGroup?.id ?? ''}
+            onChange={e => {
+              const group = groups.find(g => g.id === Number(e.target.value))
+              if (group) setSelectedGroup(group)
+            }}
+          >
+            <option value="">Select Group</option>
+            {groups.map(group => (
+              <option key={group.id} value={group.id} style={{ background: '#1e293b' }}>
+                {group.name ?? `Group ${group.id}`}
+              </option>
+            ))}
+          </select>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white text-xs pointer-events-none">▾</span>
+        </div>
+        <div className="text-2xl text-slate-900 font-bold">{selectedEvent?.name ?? '—'}</div>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-slate-500 font-medium">Dark Mode</span>
           <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
@@ -807,24 +843,6 @@ export function EventPage() {
         display: 'flex', flexDirection: 'column',
         boxSizing: 'border-box', overflow: 'hidden',
       }}>
-
-        {/* Groups selector */}
-        <div className="mb-2 flex items-center gap-3">
-          <div className="relative">
-            <select
-              className="appearance-none pl-4 pr-8 py-1.5 text-sm text-white rounded-full cursor-pointer"
-              style={{ background: GRAD, border: 'none', outline: 'none' }}
-              value={selectedGroup?.id ?? ''}
-              onChange={e => { const g = groups.find(g => g.id === Number(e.target.value)); if (g) setSelectedGroup(g) }}
-            >
-              <option value="">Select Group</option>
-              {groups.map(g => (
-                <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name ?? `Group ${g.id}`}</option>
-              ))}
-            </select>
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white text-xs pointer-events-none">▾</span>
-          </div>
-        </div>
 
         {/* Donut Ring */}
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600, marginTop: -10 }}>
@@ -852,7 +870,7 @@ export function EventPage() {
 
         {/* Event Details */}
         <div className="mt-1 px-1">
-          <EventDetails group={selectedGroup} onEdit={updateGroupField} />
+          <EventDetails event={selectedEvent} onEdit={updateEventField} />
         </div>
       </div>
 
@@ -876,7 +894,7 @@ export function EventPage() {
               transition: 'opacity 0.15s',
             }}
           >
-            + New
+            New Event
           </button>
           <button
             onClick={() => setCurrentView('current')}
@@ -911,7 +929,7 @@ export function EventPage() {
           <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: '28px 32px', gap: 20 }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Suggest a New Event</h3>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#9ca3af' }}>Create a group and kick off the conversation.</p>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#9ca3af' }}>Create an event in the selected group and kick off the conversation.</p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Event name</label>
@@ -959,9 +977,9 @@ export function EventPage() {
             <div className="px-5 pt-4 pb-3 flex-shrink-0">
               <div>
                 <h2 className="font-bold text-[22px] text-slate-800 leading-tight">
-                  {selectedGroup?.name ?? 'Park Hangout'}
+                  {selectedEvent?.name ?? 'Park Hangout'}
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Group Chat</p>
+                <p className="text-xs text-slate-400 mt-0.5">Event Chat</p>
               </div>
               <div className="flex items-center gap-2 mt-2.5">
                 <span className="text-xs text-slate-500">For You Filter</span>
@@ -1019,14 +1037,14 @@ export function EventPage() {
                 <button
                   key={event.id}
                   onClick={() => {
-                    const group = groups.find(g => g.id === event.id)
-                    if (group) setSelectedGroup(group)
+                    const selected = events.find(e => e.id === event.id)
+                    if (selected) setSelectedEvent(selected)
                     setCurrentView('current')
                   }}
                   className="w-full text-left rounded-xl border px-3 py-2.5 transition-colors"
                   style={{
-                    borderColor: selectedGroup?.id === event.id ? '#93c5fd' : '#e5e7eb',
-                    background: selectedGroup?.id === event.id ? '#eff6ff' : 'white',
+                    borderColor: selectedEvent?.id === event.id ? '#93c5fd' : '#e5e7eb',
+                    background: selectedEvent?.id === event.id ? '#eff6ff' : 'white',
                   }}
                 >
                   <div className="text-sm font-medium text-slate-800">{event.name}</div>
