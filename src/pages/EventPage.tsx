@@ -438,13 +438,8 @@ export function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-export function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
+export function EventDetails({ event, darkMode }: { event: Event | null; onEdit?: (field: string, value: string) => void; darkMode: boolean }) {
   const c = th(darkMode)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-
-  function startEdit(field: string, current: string) { setEditing(field); setDraft(current) }
-  function save(field: string) { onEdit(field, draft); setEditing(null) }
 
   const formatted = event?.eventTime
     ? new Date(event.eventTime).toLocaleDateString('en-US', {
@@ -455,7 +450,6 @@ export function EventDetails({ event, onEdit, darkMode }: { event: Event | null;
 
   const fieldText: React.CSSProperties = { color: c.text, fontSize: 13, cursor: 'pointer', transition: 'color 0.15s' }
   const placeholder: React.CSSProperties = { color: c.textFaint, fontStyle: 'italic', fontSize: 12 }
-  const editInput: React.CSSProperties = { flex: 1, borderBottom: `1.5px solid #60a5fa`, outline: 'none', fontSize: 13, background: 'transparent', color: c.text }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>

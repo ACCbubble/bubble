@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   DonutRing, EventStats, EventDetails, MessageItem, getMemberStatus,
   GRAD, th,
-  type Event, type EmojiType, type RtMember, type Roundtable,
+  type Event, type EmojiType, type Roundtable,
   type Poll, type Message, type Status, type HoveredEmoji,
 } from './EventPage'
 
