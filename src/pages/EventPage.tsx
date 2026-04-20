@@ -22,7 +22,7 @@ interface UserAttribute { key: string; score: number }
 type Status = 'coming' | 'not-responded' | 'not-coming'
 type View = 'suggest' | 'current' | 'all'
 
-const GRADIENT = 'linear-gradient(135deg, #63b7ff 0%, #6159ff 100%)'
+const GRADIENT = 'linear-gradient(135deg, #5ea8ff 0%, #665dff 100%)'
 const PANEL_BG = '#ffffff'
 const SHELL_BG = '#f7f8fc'
 
@@ -52,7 +52,7 @@ const MOCK_MESSAGES: Message[] = [
 ]
 
 const AVATAR_COLORS = ['#4f79ff', '#5ac8fa', '#50c878', '#8a7dff', '#ff7f7f', '#ffaa66']
-const SEGMENT_COLORS = ['#5fb6ff', '#74d6d5', '#f3cf6e', '#f3a672', '#f08ab2', '#a788e8']
+const SEGMENT_COLORS = ['#69bbff', '#7ddad4', '#f2d878', '#f6b47f', '#f394c0', '#a995f0']
 
 function memberColor(id: number) {
   return AVATAR_COLORS[id % AVATAR_COLORS.length]
@@ -120,6 +120,12 @@ function SegmentDonut({ members }: { members: RtMember[] }) {
   return (
     <div style={{ width: size, height: size, position: 'relative' }}>
       <svg width={size} height={size}>
+        <defs>
+          <filter id="softShadow">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.16" />
+          </filter>
+        </defs>
+
         {new Array(6).fill(0).map((_, i) => {
           const start = i * each
           const end = start + each
@@ -131,6 +137,7 @@ function SegmentDonut({ members }: { members: RtMember[] }) {
               opacity={0.92}
               stroke="#fff"
               strokeWidth={3}
+              filter="url(#softShadow)"
             />
           )
         })}
@@ -146,56 +153,62 @@ function SegmentDonut({ members }: { members: RtMember[] }) {
           alignItems: 'center',
           justifyContent: 'center',
           flexDirection: 'column',
-          color: '#9aa5c7',
+          color: '#90a2c8',
           pointerEvents: 'none',
           textAlign: 'center',
           fontSize: 16,
         }}
       >
-        <div style={{ fontSize: 28, marginBottom: 12 }}>☝️</div>
+        <div style={{ fontSize: 36, marginBottom: 10 }}>☝</div>
         <div>Hover over segments</div>
         <div>to see details</div>
       </div>
 
       {labels.map((m, i) => {
         const a = i * 60 + 30
-        const p = angleToXY(center, center, 237, a)
+        const p = angleToXY(center, center, 235, a)
+        const lineStart = angleToXY(center, center, 175, a)
+        const lineEnd = angleToXY(center, center, 214, a)
         return (
-          <div
-            key={m.userId}
-            style={{
-              position: 'absolute',
-              left: p.x - 58,
-              top: p.y - 20,
-              width: 116,
-              height: 40,
-              borderRadius: 22,
-              border: '1px solid #ebeff7',
-              background: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '0 8px',
-              boxSizing: 'border-box',
-            }}
-          >
+          <div key={m.userId}>
+            <svg width={size} height={size} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+              <line x1={lineStart.x} y1={lineStart.y} x2={lineEnd.x} y2={lineEnd.y} stroke="#dbe2f2" strokeDasharray="4 3" />
+            </svg>
             <div
               style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                background: memberColor(m.userId),
-                color: '#fff',
-                fontWeight: 700,
+                position: 'absolute',
+                left: p.x - 84,
+                top: p.y - 24,
+                width: 168,
+                height: 48,
+                borderRadius: 24,
+                border: '1px solid #e7edf7',
+                background: '#fff',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 12,
+                gap: 10,
+                padding: '0 8px',
+                boxSizing: 'border-box',
               }}
             >
-              {initials(m.name)}
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: memberColor(m.userId),
+                  color: '#fff',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 13,
+                }}
+              >
+                {initials(m.name)}
+              </div>
+              <span style={{ fontSize: 18, color: '#4a587f', lineHeight: '12px' }}>{m.name}</span>
             </div>
-            <span style={{ fontSize: 18, color: '#4a587f' }}>{m.name}</span>
           </div>
         )
       })}
@@ -226,7 +239,7 @@ function MessageRow({ msg }: { msg: Message }) {
         >
           {initials(msg.sender.name)}
         </div>
-        <span style={{ color: '#2f3f72', fontSize: 16, lineHeight: '12px' }}>{msg.sender.name}</span>
+        <span style={{ color: '#2f3f72', fontSize: 15, lineHeight: '12px' }}>{msg.sender.name}</span>
         <span style={{ color: '#acb6d1', fontSize: 12, lineHeight: '12px' }}>{time}</span>
       </div>
 
@@ -276,7 +289,7 @@ function DetailRow({
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderBottom: '1px solid #edf1f8' }}>
       <span style={{ fontSize: 16 }}>{icon}</span>
-      <span style={{ color: '#b4bed7', minWidth: 90 }}>{label}</span>
+      <span style={{ color: '#b4bed7', minWidth: 90, fontSize: 14 }}>{label}</span>
       {editing ? (
         isTime ? (
           <input
@@ -299,7 +312,7 @@ function DetailRow({
         )
       ) : (
         <span
-          style={{ color: display ? '#4a587f' : '#c2cade', cursor: 'pointer' }}
+          style={{ color: display ? '#4a587f' : '#c2cade', cursor: 'pointer', fontSize: 16 }}
           onClick={() => { setDraft(isTime && value ? value.slice(0, 16) : (value ?? '')); setEditing(true) }}
         >
           {display || placeholder}
@@ -485,7 +498,7 @@ export function EventPage() {
         boxSizing: 'border-box',
       }}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, height: '100%' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.95fr 1fr', gap: 16, height: '100%' }}>
         <div
           style={{
             background: PANEL_BG,
@@ -517,7 +530,7 @@ export function EventPage() {
                   outline: 'none',
                 }}
               >
-                <option value="">Groups</option>
+                <option value="">👥&nbsp;&nbsp;Groups</option>
                 {groups.map(g => (
                   <option key={g.id} value={g.id}>{g.name ?? `Group ${g.id}`}</option>
                 ))}
@@ -525,12 +538,12 @@ export function EventPage() {
               <span style={{ position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)', color: '#fff' }}>▾</span>
             </div>
 
-            <button style={{ height: 50, borderRadius: 26, border: 'none', padding: '0 22px', background: '#edf0ff', color: '#625ffb', fontSize: 16 }}>
-              Invite
+            <button style={{ height: 50, borderRadius: 26, border: 'none', padding: '0 22px', background: '#f1efff', color: '#625ffb', fontSize: 16 }}>
+              👥＋ Invite
             </button>
 
             <button style={{ marginLeft: 'auto', height: 50, borderRadius: 26, border: '1px solid #e8ecf5', padding: '0 22px', background: '#fff', color: '#51608b', fontSize: 16 }}>
-              Polls
+              📊 Polls
             </button>
 
             <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#eaf1ff', border: '1px solid #e5ebf8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5f6f97' }}>
@@ -544,15 +557,15 @@ export function EventPage() {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 6 }}>
             <div style={{ borderRadius: 12, border: '1px solid #9edbb3', background: '#ecf9f0', padding: '10px 12px', color: '#17a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span style={{ fontSize: 30, lineHeight: '16px', fontWeight: 700 }}>{comingMembers.length}</span>
+              <span style={{ fontSize: 18, lineHeight: '16px', fontWeight: 700 }}>{comingMembers.length}</span>
               <span>Coming</span>
             </div>
             <div style={{ borderRadius: 12, border: '1px solid #e4e8f2', background: '#f8f9fd', padding: '10px 12px', color: '#7182ad', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span style={{ fontSize: 30, lineHeight: '16px', fontWeight: 700 }}>{notRespondedMembers.length}</span>
+              <span style={{ fontSize: 18, lineHeight: '16px', fontWeight: 700 }}>{notRespondedMembers.length}</span>
               <span>Not Responded</span>
             </div>
             <div style={{ borderRadius: 12, border: '1px solid #f0c6aa', background: '#fff6f1', padding: '10px 12px', color: '#ef6f2f', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span style={{ fontSize: 30, lineHeight: '16px', fontWeight: 700 }}>{notComingMembers.length}</span>
+              <span style={{ fontSize: 18, lineHeight: '16px', fontWeight: 700 }}>{notComingMembers.length}</span>
               <span>Not Coming</span>
             </div>
           </div>
@@ -578,8 +591,8 @@ export function EventPage() {
         >
           <div style={{ padding: 12 }}>
             <div style={{ background: '#f4f6fc', borderRadius: 16, padding: 4, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
-              <button onClick={() => setView('suggest')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'suggest' ? GRADIENT : 'transparent', color: view === 'suggest' ? '#fff' : '#51608b' }}>Suggest Event</button>
-              <button onClick={() => setView('current')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'current' ? GRADIENT : 'transparent', color: view === 'current' ? '#fff' : '#51608b' }}>Current Event</button>
+              <button onClick={() => setView('suggest')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'suggest' ? GRADIENT : 'transparent', color: view === 'suggest' ? '#fff' : '#51608b' }}>🗓️ Suggest Event</button>
+              <button onClick={() => setView('current')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'current' ? GRADIENT : 'transparent', color: view === 'current' ? '#fff' : '#51608b' }}>💬 Current Event</button>
               <button onClick={() => setView('all')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'all' ? GRADIENT : 'transparent', color: view === 'all' ? '#fff' : '#51608b' }}>All Events</button>
             </div>
           </div>
@@ -624,13 +637,13 @@ export function EventPage() {
             <>
               <div style={{ padding: '4px 20px 8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <h2 style={{ margin: 0, color: '#2f3f72', fontSize: 44 }}>{selectedGroup?.name ?? 'Park Hangout'}</h2>
+                  <h2 style={{ margin: 0, color: '#2f3f72', fontSize: 15 }}>{selectedGroup?.name ?? 'Park Hangout'}</h2>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#4f5f8b', fontSize: 16 }}>
                     <span>For-You</span>
                     <ForYouToggle on={forYou} onToggle={() => setForYou(v => !v)} />
                   </div>
                 </div>
-                <div style={{ color: '#9babcf', marginTop: 4, fontSize: 16 }}>Group Chat</div>
+                <div style={{ color: '#9babcf', marginTop: 4, fontSize: 14 }}>Group Chat</div>
               </div>
 
               <div style={{ height: 1, background: '#edf1f8' }} />
