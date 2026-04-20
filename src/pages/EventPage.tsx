@@ -604,6 +604,57 @@ function isNotFoundError(err: unknown): boolean {
   return (err as Error)?.message?.toLowerCase() === 'not found'
 }
 
+function inferFallbackEmojis(
+  memberMessages: Message[],
+  emojiMap: Record<number, EmojiType>
+): RtEmoji[] {
+  const byName = Object.values(emojiMap).reduce<Record<string, EmojiType>>((acc, emojiType) => {
+    acc[emojiType.name] = emojiType
+    return acc
+  }, {})
+
+  const contentList = memberMessages.map(message => message.content.toLowerCase())
+  const quotes = memberMessages.map(message => message.content).slice(-4).reverse()
+
+  const inferred: RtEmoji[] = []
+  const comingType = byName['coming']
+  if (comingType) {
+    const hasPositiveComing = contentList.some(content =>
+      /(i[' ]?m in|count me in|i[' ]?ll be there|i am coming|i'm coming|coming\b)/.test(content)
+    )
+    const hasNegativeComing = contentList.some(content =>
+      /(not coming|can't make it|cannot make it|won't make it|not going)/.test(content)
+    )
+    if (hasPositiveComing || hasNegativeComing) {
+      inferred.push({
+        emojiId: comingType.id,
+        score: hasPositiveComing ? 0.9 : 0.1,
+        topQuotes: quotes.length > 0 ? quotes : ['Responded in chat'],
+      })
+    }
+  }
+
+  const needsRideType = byName['needs_ride']
+  if (needsRideType && contentList.some(content => /(ride|drive|carpool)/.test(content))) {
+    inferred.push({
+      emojiId: needsRideType.id,
+      score: 0.7,
+      topQuotes: quotes.length > 0 ? quotes : ['Discussed rides in chat'],
+    })
+  }
+
+  const bringingFoodType = byName['bringing_food']
+  if (bringingFoodType && contentList.some(content => /(bring|snack|food|pizza|chips|drink)/.test(content))) {
+    inferred.push({
+      emojiId: bringingFoodType.id,
+      score: 0.75,
+      topQuotes: quotes.length > 0 ? quotes : ['Discussed food in chat'],
+    })
+  }
+
+  return inferred
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function EventPage() {
@@ -786,20 +837,33 @@ export function EventPage() {
 
   // ── Derived ──
   const fallbackRoundtableMembers = useMemo<RtMember[]>(() => {
-    const memberById = new Map<number, RtMember>()
+    const messagesByMemberId = new Map<number, Message[]>()
     for (const message of messages) {
-      if (memberById.has(message.sender.id)) continue
-      memberById.set(message.sender.id, {
-        userId: message.sender.id,
-        name: message.sender.name,
+      const existing = messagesByMemberId.get(message.sender.id)
+      if (existing) existing.push(message)
+      else messagesByMemberId.set(message.sender.id, [message])
+    }
+
+    const memberById = new Map<number, RtMember>()
+    for (const [memberId, memberMessages] of messagesByMemberId.entries()) {
+      const lastMessage = memberMessages[memberMessages.length - 1]
+      memberById.set(memberId, {
+        userId: memberId,
+        name: lastMessage?.sender.name ?? `User ${memberId}`,
+        emojis: inferFallbackEmojis(memberMessages, emojiMap),
+      })
+    }
+
+    if (me && !memberById.has(me.userId)) {
+      memberById.set(me.userId, {
+        userId: me.userId,
+        name: me.name,
         emojis: [],
       })
     }
-    if (me && !memberById.has(me.userId)) {
-      memberById.set(me.userId, { userId: me.userId, name: me.name, emojis: [] })
-    }
+
     return Array.from(memberById.values())
-  }, [messages, me])
+  }, [messages, me, emojiMap])
 
   const allMembers = roundtable.members.length > 0 ? roundtable.members : fallbackRoundtableMembers
   const comingEmojiId = Object.values(emojiMap).find(e => e.name === 'coming')?.id ?? null
