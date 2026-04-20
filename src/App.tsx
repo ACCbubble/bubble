@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './App.css'
 import { apiDelete, apiPost, apiGet } from './api'
 import { MessagesPage } from './pages/MessagesPage'
@@ -10,6 +10,8 @@ import { MePage } from './pages/MePage'
 import { GroupsPage } from './pages/GroupsPage'
 import { RoundTablePage } from './pages/RoundTablePage'
 import { EventPage } from './pages/EventPage'
+import { DemoSignupPage } from './pages/DemoSignupPage'
+import { DemoPage } from './pages/DemoPage'
 
 interface Me { userId: number; name: string }
 
@@ -326,16 +328,18 @@ function ProfileMenu() {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
-function App() {
+function AppInner() {
+  const { pathname } = useLocation()
+  const isDemo = pathname === '/demo' || pathname === '/demosignup'
   return (
-    <BrowserRouter>
-      <div className="app">
+    <div className="app">
+      {!isDemo && (
         <header className="header">
           <ProfileMenu />
         </header>
-
-        <main className="page">
-          <Routes>
+      )}
+      <main className={isDemo ? undefined : 'page'}>
+        <Routes>
             <Route path="/" element={<Navigate to="/event" replace />} />
             <Route path="/sign-in" element={<Navigate to="/event" replace />} />
             <Route path="/sign-up" element={<Navigate to="/event" replace />} />
@@ -346,9 +350,18 @@ function App() {
             <Route path="/me" element={<MePage />} />
             <Route path="/roundtable" element={<RoundTablePage />} />
             <Route path="/event" element={<EventPage />} />
+            <Route path="/demosignup" element={<DemoSignupPage />} />
+            <Route path="/demo" element={<DemoPage />} />
           </Routes>
-        </main>
-      </div>
+      </main>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppInner />
     </BrowserRouter>
   )
 }

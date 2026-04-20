@@ -7,26 +7,28 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 
 interface Me { userId: number; name: string }
 interface Group { id: number; name: string }
-interface Event {
+export interface Event {
   id: number; groupId: number; name: string
   location: string | null; eventTime: string | null; description: string | null
 }
-interface EmojiType { id: number; name: string; emoji: string }
-interface RtEmoji { emojiId: number; score: number; topQuotes: string[] }
-interface RtMember { userId: number; name: string; emojis: RtEmoji[] }
-interface Roundtable { members: RtMember[] }
-interface Message { id: number; content: string; createdAt: string; sender: { id: number; name: string } }
+export interface EmojiType { id: number; name: string; emoji: string }
+export interface RtEmoji { emojiId: number; score: number; topQuotes: string[] }
+export interface RtMember { userId: number; name: string; emojis: RtEmoji[] }
+export interface Roundtable { members: RtMember[] }
+export interface PollOption { id: number; optionText: string | null; voteCount: number; percentage: number; selectedByViewer: boolean }
+export interface Poll { id: number; question: string | null; options: PollOption[]; isActive: boolean; allowsMultiple: boolean; allowsSuggestions: boolean; totalVoters: number; viewerVoteOptionIds: number[] }
+export interface Message { id: number; content: string; createdAt: string; sender: { id: number; name: string }; isAutoPoll?: boolean; poll?: Poll }
 interface FeedMessage extends Message { relevanceScore: number }
 interface UserAttribute { key: string; score: number }
 
-type Status = 'coming' | 'not-responded' | 'not-coming'
+export type Status = 'coming' | 'not-responded' | 'not-coming'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GRAD = 'linear-gradient(135deg, #86efac 0%, #60a5fa 50%, #c084fc 100%)'
+export const GRAD = 'linear-gradient(135deg, #86efac 0%, #60a5fa 50%, #c084fc 100%)'
 
 // ─── Theme helper ─────────────────────────────────────────────────────────────
-function th(dark: boolean) {
+export function th(dark: boolean) {
   return {
     pageBg:      dark ? '#0f172a' : '#f3f4f6',
     panelBg:     dark ? '#1e293b' : '#ffffff',
@@ -49,12 +51,12 @@ function th(dark: boolean) {
   }
 }
 
-const MEMBER_COLORS = [
+export const MEMBER_COLORS = [
   '#3b82f6', '#10b981', '#f97316', '#8b5cf6',
   '#ef4444', '#0ea5e9', '#f59e0b', '#22c55e',
 ]
 
-function memberColor(userId: number) { return MEMBER_COLORS[userId % MEMBER_COLORS.length] }
+export function memberColor(userId: number) { return MEMBER_COLORS[userId % MEMBER_COLORS.length] }
 
 // ─── SVG Donut Ring ───────────────────────────────────────────────────────────
 
@@ -74,7 +76,7 @@ function slicePath(startDeg: number, endDeg: number) {
   return `M ${o1.x} ${o1.y} A ${OUTER} ${OUTER} 0 ${large} 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${INNER} ${INNER} 0 ${large} 0 ${i1.x} ${i1.y} Z`
 }
 
-interface HoveredEmoji { memberId: number; emojiId: number }
+export interface HoveredEmoji { memberId: number; emojiId: number }
 
 interface DonutRingProps {
   members: RtMember[]
@@ -86,7 +88,7 @@ interface DonutRingProps {
   darkMode: boolean
 }
 
-function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, onEmojiHover, darkMode }: DonutRingProps) {
+export function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, onEmojiHover, darkMode }: DonutRingProps) {
   const c = th(darkMode)
   const n = members.length
   const GAP = n > 1 ? 1.0 : 0
@@ -357,7 +359,7 @@ interface StatItem {
   tooltipAlign: 'left' | 'center' | 'right'
 }
 
-interface EventStatsProps {
+export interface EventStatsProps {
   coming: number
   notResponded: number
   notComing: number
@@ -369,7 +371,7 @@ interface EventStatsProps {
   darkMode: boolean
 }
 
-function EventStats({
+export function EventStats({
   coming, notResponded, notComing,
   comingMembers, notRespondedMembers, notComingMembers,
   hoveredStat, onStatHover, darkMode,
@@ -436,7 +438,7 @@ function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
+export function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
   const c = th(darkMode)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -459,37 +461,21 @@ function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📍</span>
-        {editing === 'location' ? (
-          <input autoFocus style={editInput}
-            value={draft} onChange={e => setDraft(e.target.value)}
-            onBlur={() => save('location')} onKeyDown={e => e.key === 'Enter' && save('location')} />
-        ) : (
-          <span style={fieldText} onClick={() => startEdit('location', event?.location ?? '')}>
-            {event?.location ?? <span style={placeholder}>Add location…</span>}
-          </span>
-        )}
+        <span style={{ ...fieldText, cursor: 'default' }}>
+          {event?.location ?? <span style={placeholder}>Location decided by poll</span>}
+        </span>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>🕐</span>
-        {editing === 'eventTime' ? (
-          <input autoFocus type="datetime-local" style={{ ...editInput, colorScheme: darkMode ? 'dark' : 'light' }}
-            value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
-        ) : (
-          <span style={fieldText} onClick={() => startEdit('eventTime', event?.eventTime ? event.eventTime.slice(0, 16) : '')}>
-            {formatted ?? <span style={placeholder}>Add date & time…</span>}
-          </span>
-        )}
+        <span style={{ ...fieldText, cursor: 'default' }}>
+          {formatted ?? <span style={placeholder}>Date & time decided by poll</span>}
+        </span>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📄</span>
-        {editing === 'description' ? (
-          <textarea autoFocus rows={2} style={{ ...editInput, resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
-            value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
-        ) : (
-          <span style={{ ...fieldText, lineHeight: 1.5 }} onClick={() => startEdit('description', event?.description ?? '')}>
-            {event?.description ?? <span style={placeholder}>Add description…</span>}
-          </span>
-        )}
+        <span style={{ ...fieldText, lineHeight: 1.5, cursor: 'default' }}>
+          {event?.description ?? <span style={placeholder}>Description decided by poll</span>}
+        </span>
       </div>
     </div>
   )
@@ -515,21 +501,157 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   )
 }
 
+// ─── Poll Card ────────────────────────────────────────────────────────────────
+
+export function PollCard({ poll: initialPoll, meId, darkMode }: { poll: Poll; meId: number | null; darkMode: boolean }) {
+  const c = th(darkMode)
+  const [poll, setPoll] = useState(initialPoll)
+  const [voting, setVoting] = useState(false)
+  const [suggestion, setSuggestion] = useState('')
+  const [suggesting, setSuggesting] = useState(false)
+
+  // Sync when parent patches poll via WebSocket update
+  useEffect(() => { setPoll(initialPoll) }, [initialPoll])
+
+  const hasVoted = meId !== null && poll.viewerVoteOptionIds.length > 0
+
+  const handleVote = async (optionId: number) => {
+    if (!meId || !poll.isActive || voting) return
+    setVoting(true)
+    try {
+      const result = await apiPost<{ poll: Poll }>(`/polls/${poll.id}/votes`, { userId: meId, optionId })
+      if (result.poll) setPoll(result.poll)
+    } catch { /* ignore */ }
+    setVoting(false)
+  }
+
+  const handleSuggest = async () => {
+    if (!meId || !suggestion.trim() || suggesting) return
+    setSuggesting(true)
+    try {
+      const result = await apiPost<{ poll: Poll }>(`/polls/${poll.id}/suggestions`, {
+        userId: meId,
+        optionText: suggestion.trim(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      })
+      if (result.poll) setPoll(result.poll)
+      setSuggestion('')
+    } catch { /* ignore */ }
+    setSuggesting(false)
+  }
+
+  return (
+    <div style={{
+      background: darkMode ? '#1e293b' : '#ffffff',
+      border: `1px solid ${c.border}`,
+      borderRadius: 14,
+      padding: '12px 14px',
+      minWidth: 220,
+      maxWidth: 320,
+    }}>
+      <p style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 600, color: c.text, lineHeight: 1.4 }}>
+        {poll.question}
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {poll.options.map(opt => {
+          const selected = poll.viewerVoteOptionIds.includes(opt.id)
+          return (
+            <div
+              key={opt.id}
+              onClick={() => handleVote(opt.id)}
+              style={{
+                position: 'relative',
+                cursor: poll.isActive && meId ? 'pointer' : 'default',
+                borderRadius: 8,
+                overflow: 'hidden',
+                border: selected ? '1.5px solid #60a5fa' : `1px solid ${c.border}`,
+                background: darkMode ? '#0f172a' : '#f8faff',
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 0, left: 0, bottom: 0,
+                width: `${opt.percentage}%`,
+                background: selected ? 'rgba(96,165,250,0.25)' : 'rgba(134,239,172,0.15)',
+                transition: 'width 0.4s ease',
+                pointerEvents: 'none',
+              }} />
+              <div style={{
+                position: 'relative',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '7px 10px', fontSize: 13,
+              }}>
+                <span style={{ fontWeight: selected ? 600 : 400, color: c.text }}>{opt.optionText}</span>
+                <span style={{ fontSize: 11, color: c.textSub, whiteSpace: 'nowrap' }}>
+                  {hasVoted ? `${opt.percentage}%` : opt.voteCount > 0 ? `${opt.voteCount}` : ''}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {poll.allowsSuggestions && poll.isActive && meId && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          <input
+            value={suggestion}
+            onChange={e => setSuggestion(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSuggest()}
+            placeholder="Add your own..."
+            style={{
+              flex: 1, fontSize: 12, padding: '6px 10px',
+              borderRadius: 8, border: `1px solid ${c.border}`,
+              background: c.inputBg, color: c.text, outline: 'none',
+            }}
+          />
+          <button
+            onClick={handleSuggest}
+            disabled={suggesting || !suggestion.trim()}
+            style={{
+              fontSize: 12, padding: '6px 10px', borderRadius: 8,
+              border: 'none', background: GRAD, color: 'white',
+              cursor: suggesting || !suggestion.trim() ? 'not-allowed' : 'pointer',
+              opacity: suggesting || !suggestion.trim() ? 0.5 : 1,
+            }}
+          >
+            +
+          </button>
+        </div>
+      )}
+
+      <p style={{ margin: '8px 0 0', fontSize: 11, color: c.textFaint }}>
+        {poll.totalVoters} {poll.totalVoters === 1 ? 'vote' : 'votes'} · {poll.isActive ? 'open' : 'closed'}
+        {poll.allowsSuggestions && ' · suggestions on'}
+      </p>
+    </div>
+  )
+}
+
 // ─── Message Item (iOS-style bubbles) ─────────────────────────────────────────
 
-interface MessageItemProps {
+export interface MessageItemProps {
   msg: Message
   meId: number | null
   compact?: boolean
   darkMode: boolean
 }
 
-function MessageItem({ msg, meId, compact = false, darkMode }: MessageItemProps) {
+export function MessageItem({ msg, meId, compact = false, darkMode }: MessageItemProps) {
   const c = th(darkMode)
   const isMe = msg.sender.id === meId
   const color = memberColor(msg.sender.id)
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   const fontSize = compact ? 12 : 15
+
+  // Auto-poll messages render as poll cards
+  if (msg.isAutoPoll && msg.poll && !compact) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginLeft: 36 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: c.textFaint }}>Poll</span>
+        <PollCard poll={msg.poll} meId={meId} darkMode={darkMode} />
+        <span style={{ fontSize: 10, color: c.textFaint }}>{time}</span>
+      </div>
+    )
+  }
 
   if (isMe) {
     return (
@@ -584,7 +706,7 @@ function MessageItem({ msg, meId, compact = false, darkMode }: MessageItemProps)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getMemberStatus(
+export function getMemberStatus(
   member: RtMember,
   comingEmojiId: number | null,
   notComingEmojiId: number | null,
@@ -715,6 +837,11 @@ export function EventPage() {
   const inviteRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  // Refs so WebSocket closure always reads current values without needing to re-subscribe
+  const aiSortedRef = useRef(aiSorted)
+  const meRef = useRef(me)
+  const feedReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useLayoutEffect(() => {
     const onResize = () => setWindowWidth(window.innerWidth)
@@ -731,6 +858,15 @@ export function EventPage() {
     page.style.padding = '0'
     return () => { page.style.padding = prev }
   }, [])
+
+  // Keep refs in sync with state/props so WS closure reads fresh values
+  useEffect(() => { aiSortedRef.current = aiSorted }, [aiSorted])
+  useEffect(() => { meRef.current = me }, [me])
+
+  const scrollToBottom = () => {
+    const el = messagesContainerRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }
 
   // Sync dark mode to document so App.css header/body rules respond
   useEffect(() => {
@@ -763,23 +899,30 @@ export function EventPage() {
       .catch(() => {})
   }, [])
 
-  // Load groups when me is available
+  // Load groups when me is available, restore last selected group
   useEffect(() => {
     if (!me) return
     apiGet<Group[]>('/groups').then(gs => {
       setGroups(gs)
-      if (gs.length > 0) setSelectedGroup(gs[0])
+      if (gs.length === 0) return
+      const savedGroupId = Number(localStorage.getItem('bubble_groupId'))
+      const restored = savedGroupId ? gs.find(g => g.id === savedGroupId) : null
+      setSelectedGroup(restored ?? gs[0])
     }).catch(() => {})
   }, [me])
 
-  // Load events when group changes
+  // Load events when group changes, restore last selected event
   useEffect(() => {
     if (!selectedGroup) return
+    localStorage.setItem('bubble_groupId', String(selectedGroup.id))
     setEvents([])
     setSelectedEvent(null)
     apiGet<Event[]>(`/groups/${selectedGroup.id}/events`).then(evts => {
       setEvents(evts)
-      if (evts.length > 0) setSelectedEvent(evts[0])
+      if (evts.length === 0) return
+      const savedEventId = Number(localStorage.getItem('bubble_eventId'))
+      const restored = savedEventId ? evts.find(e => e.id === savedEventId) : null
+      setSelectedEvent(restored ?? evts[0])
     }).catch(() => {})
   }, [selectedGroup])
 
@@ -792,6 +935,14 @@ export function EventPage() {
     const loadMsgs = () => apiGet<Message[]>(`/events/${eid}/messages`).then(setMessages).catch(() => {})
     const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/events/${eid}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
 
+    const scheduleFeedReload = (delayMs: number) => {
+      if (feedReloadTimerRef.current) clearTimeout(feedReloadTimerRef.current)
+      feedReloadTimerRef.current = setTimeout(() => {
+        const uid = meRef.current?.userId
+        if (uid) loadFeed(uid)
+      }, delayMs)
+    }
+
     loadRT(); loadMsgs()
     if (me) loadFeed(me.userId)
 
@@ -800,15 +951,69 @@ export function EventPage() {
     wsRef.current = ws
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data)
-      if (data.type === 'context_updated') { loadRT(); if (me) loadFeed(me.userId) }
-      if (data.type === 'new_message') { setMessages(prev => [...prev, data.message]); if (me) loadFeed(me.userId) }
+      const uid = meRef.current?.userId
+
+      if (data.type === 'context_updated') {
+        loadRT()
+        scheduleFeedReload(1500)
+      }
+
+      if (data.type === 'new_message') {
+        setMessages(prev => [...prev, data.message])
+        if (aiSortedRef.current) {
+          // In relevancy mode: debounce feed reload so reordering doesn't jump the view
+          scheduleFeedReload(3000)
+        } else {
+          if (uid) loadFeed(uid)
+        }
+      }
+
+      if (data.type === 'poll_updated') {
+        const pollId = data.pollId as number
+        apiGet<Poll>(`/polls/${pollId}/results${uid ? `?userId=${uid}` : ''}`).then(updatedPoll => {
+          // Patch in-place in both lists — no full reload, no scroll
+          setMessages(prev => prev.map(m => m.poll?.id === pollId ? { ...m, poll: updatedPoll } : m))
+          setFeedMessages(prev => prev.map(m => m.poll?.id === pollId ? { ...m, poll: updatedPoll } : m))
+        }).catch(() => {})
+        // Reload event so location/time/description fields update from poll winner sync
+        apiGet<Event>(`/events/${eid}`).then(updated => {
+          setSelectedEvent(updated)
+          setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
+        }).catch(() => {})
+      }
     }
-    return () => { ws.close() }
+    return () => {
+      ws.close()
+      if (feedReloadTimerRef.current) clearTimeout(feedReloadTimerRef.current)
+    }
   }, [selectedEvent])
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, aiSorted])
+  // Snap to bottom on event switch, initial load, or filter toggle
+  const prevEventIdRef = useRef<number | null>(null)
+  const prevAiSortedRef = useRef(aiSorted)
+  const hasScrolledForEventRef = useRef(false)
+  const prevFeedLengthRef = useRef(0)
+
+  useLayoutEffect(() => {
+    const eventChanged = selectedEvent?.id !== prevEventIdRef.current
+    const filterToggled = aiSorted !== prevAiSortedRef.current
+    // In For You mode, treat the feed first arriving as a trigger (it reorders everything)
+    const feedJustArrived = aiSorted && prevFeedLengthRef.current === 0 && feedMessages.length > 0
+    const justLoaded = !hasScrolledForEventRef.current && messages.length > 0
+
+    if (eventChanged) {
+      prevEventIdRef.current = selectedEvent?.id ?? null
+      hasScrolledForEventRef.current = false
+      prevFeedLengthRef.current = 0
+    }
+    prevAiSortedRef.current = aiSorted
+    prevFeedLengthRef.current = feedMessages.length
+
+    if (eventChanged || filterToggled || feedJustArrived || justLoaded) {
+      if (messages.length > 0) hasScrolledForEventRef.current = true
+      scrollToBottom()
+    }
+  }, [messages, feedMessages, selectedEvent, aiSorted])
 
   const sendMessage = async () => {
     if (!text.trim() || !selectedEvent || !me) return
@@ -850,10 +1055,14 @@ export function EventPage() {
     setSuggestLoading(true)
     setSuggestError('')
     try {
-      const event = await apiPost<Event>(`/groups/${selectedGroup.id}/events`, { name: suggestName.trim() })
-      await apiPost('/messages', { eventId: event.id, senderId: me.userId, content: suggestMsg.trim() })
+      // Backend creates the initial message and auto-polls in one call
+      const event = await apiPost<Event>(`/groups/${selectedGroup.id}/events`, {
+        name: suggestName.trim(),
+        initialMessage: suggestMsg.trim(),
+      })
       setEvents(prev => [event, ...prev])
       setSelectedEvent(event)
+      localStorage.setItem('bubble_eventId', String(event.id))
       setCurrentView('current')
       setSuggestName('')
       setSuggestMsg('')
@@ -882,12 +1091,12 @@ export function EventPage() {
 
   const displayMessages = aiSorted
     ? (feedMessages.length > 0 ? feedMessages : [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
-        .filter(m => m.sender.id !== me?.userId)
+        .filter(m => m.sender.id !== me?.userId || m.isAutoPoll)
         .reverse()
     : [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
   const myRecentMessages = messages
-    .filter(m => m.sender.id === me?.userId)
+    .filter(m => m.sender.id === me?.userId && !m.isAutoPoll)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3)
 
@@ -1018,7 +1227,7 @@ export function EventPage() {
                 value={selectedEvent?.id ?? ''}
                 onChange={e => {
                   const ev = events.find(ev => ev.id === Number(e.target.value))
-                  if (ev) setSelectedEvent(ev)
+                  if (ev) { setSelectedEvent(ev); localStorage.setItem('bubble_eventId', String(ev.id)) }
                 }}
               >
                 <option value="">Select Event</option>
@@ -1217,7 +1426,10 @@ export function EventPage() {
 
             <div style={{ height: 1, background: c.border, flexShrink: 0 }} />
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+            <div
+              ref={messagesContainerRef}
+              style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, position: 'relative' }}
+            >
               {!selectedEvent
                 ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>
                     {selectedGroup ? 'No events in this group yet. Create one with + New.' : 'Sign in and select a group to get started.'}
@@ -1276,7 +1488,7 @@ export function EventPage() {
               {events.map(event => (
                 <button
                   key={event.id}
-                  onClick={() => { setSelectedEvent(event); setCurrentView('current') }}
+                  onClick={() => { setSelectedEvent(event); localStorage.setItem('bubble_eventId', String(event.id)); setCurrentView('current') }}
                   style={{
                     width: '100%', textAlign: 'left', borderRadius: 12,
                     border: `1.5px solid ${selectedEvent?.id === event.id ? '#93c5fd' : c.border}`,
