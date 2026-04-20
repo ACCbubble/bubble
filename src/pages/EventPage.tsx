@@ -33,30 +33,7 @@ const MOCK_EMOJI_MAP: Record<number, EmojiType> = {
   3: { id: 3, name: 'bringing_food', emoji: '🍕' },
 }
 
-const MOCK_ROUNDTABLE: Roundtable = {
-  members: [
-    { userId: 1, name: 'Andy', emojis: [
-      { emojiId: 1, score: 0.9, topQuotes: ["I'm in! What time should we meet?", "Count me in for sure", "See you all there!", "Can't wait"] },
-      { emojiId: 2, score: 0.7, topQuotes: ["I can give people rides if needed", "I have space for 3", "Happy to drive"] },
-    ]},
-    { userId: 2, name: 'Sidney', emojis: [] },
-    { userId: 3, name: 'Bartholomew', emojis: [] },
-    { userId: 4, name: 'Colin', emojis: [
-      { emojiId: 1, score: 0.85, topQuotes: ["Perfect! See you all there", "Definitely coming", "I'll be there at 6", "Excited!"] },
-      { emojiId: 3, score: 0.8, topQuotes: ["I'll bring snacks!", "Bringing chips and dip", "Happy to bring food"] },
-    ]},
-    { userId: 5, name: 'Christopher', emojis: [] },
-    { userId: 6, name: 'Manasa', emojis: [] },
-  ]
-}
-
-const MOCK_MESSAGES: Message[] = [
-  { id: 1, content: "Perfect! See you all there", createdAt: new Date(Date.now() - 23 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
-  { id: 2, content: "I might not make it, got a work thing", createdAt: new Date(Date.now() - 20 * 60000).toISOString(), sender: { id: 5, name: 'Rohan' } },
-  { id: 3, content: "I'm in! What time should we meet?", createdAt: new Date(Date.now() - 26 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 4, content: "I can give people rides if needed", createdAt: new Date(Date.now() - 18 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 5, content: "I'll bring some games!", createdAt: new Date(Date.now() - 15 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
-]
+const EMPTY_ROUNDTABLE: Roundtable = { members: [] }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -636,8 +613,8 @@ export function EventPage() {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [emojiMap, setEmojiMap] = useState<Record<number, EmojiType>>(MOCK_EMOJI_MAP)
-  const [roundtable, setRoundtable] = useState<Roundtable>(MOCK_ROUNDTABLE)
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES)
+  const [roundtable, setRoundtable] = useState<Roundtable>(EMPTY_ROUNDTABLE)
+  const [messages, setMessages] = useState<Message[]>([])
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
   const [userAttrs, setUserAttrs] = useState<Record<string, number>>({})
   const [text, setText] = useState('')
@@ -695,8 +672,8 @@ export function EventPage() {
 
   useEffect(() => {
     if (!selectedEvent) return
-    const loadRT = () => apiGet<Roundtable>(`/roundtable?eventId=${selectedEvent.id}`).then(setRoundtable).catch(() => {})
-    const loadMsgs = () => apiGet<Message[]>(`/events/${selectedEvent.id}/messages`).then(setMessages).catch(() => {})
+    const loadRT = () => apiGet<Roundtable>(`/roundtable?eventId=${selectedEvent.id}`).then(setRoundtable).catch(() => setRoundtable(EMPTY_ROUNDTABLE))
+    const loadMsgs = () => apiGet<Message[]>(`/events/${selectedEvent.id}/messages`).then(setMessages).catch(() => setMessages([]))
     const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/events/${selectedEvent.id}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
 
     loadRT(); loadMsgs()
@@ -727,6 +704,8 @@ export function EventPage() {
         if (!isNotFoundError(err)) throw err
         await apiPost('/messages', { ...payload, eventId: selectedEvent.id })
       }
+      const latestMessages = await apiGet<Message[]>(`/events/${selectedEvent.id}/messages`).catch(() => null)
+      if (latestMessages) setMessages(latestMessages)
       setText('')
     }
     catch { /* silent */ }
