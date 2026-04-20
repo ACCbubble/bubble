@@ -57,6 +57,30 @@ const MOCK_MESSAGES: Message[] = [
 
 const GRAD = 'linear-gradient(135deg, #86efac 0%, #60a5fa 50%, #c084fc 100%)'
 
+// ─── Theme helper ─────────────────────────────────────────────────────────────
+function th(dark: boolean) {
+  return {
+    pageBg:      dark ? '#0f172a' : '#f3f4f6',
+    panelBg:     dark ? '#1e293b' : '#ffffff',
+    panelBg2:    dark ? '#162032' : '#fafafa',
+    muted:       dark ? '#334155' : '#f3f4f6',
+    border:      dark ? '#334155' : '#e5e7eb',
+    text:        dark ? '#f1f5f9' : '#111827',
+    textSub:     dark ? '#94a3b8' : '#6b7280',
+    textFaint:   dark ? '#64748b' : '#9ca3af',
+    msgOtherBg:  dark ? '#334155' : '#f0f0f0',
+    msgOtherTxt: dark ? '#f1f5f9' : '#111827',
+    inputBg:     dark ? '#0f172a' : '#f3f4f6',
+    centerFill1: dark ? '#1e2d45' : '#f8faff',
+    centerFill2: dark ? '#162032' : '#eef2ff',
+    nameBadge:   dark ? 'rgba(15,23,42,0.75)' : 'rgba(200,210,225,0.65)',
+    nameBadgeTxt:dark ? '#94a3b8' : '#4b5563',
+    tooltipBg:   dark ? '#0f172a' : '#ffffff',
+    tabActiveBg: dark ? '#334155' : '#ffffff',
+    tabInactBg:  dark ? 'transparent' : 'transparent',
+  }
+}
+
 const MEMBER_COLORS = [
   '#3b82f6', '#10b981', '#f97316', '#8b5cf6',
   '#ef4444', '#0ea5e9', '#f59e0b', '#22c55e',
@@ -91,9 +115,11 @@ interface DonutRingProps {
   hoveredEmoji: HoveredEmoji | null
   onHover: (id: number | null) => void
   onEmojiHover: (val: HoveredEmoji | null) => void
+  darkMode: boolean
 }
 
-function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, onEmojiHover }: DonutRingProps) {
+function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, onEmojiHover, darkMode }: DonutRingProps) {
+  const c = th(darkMode)
   const n = members.length
   const GAP = n > 1 ? 1.0 : 0
   const degPer = 360 / Math.max(n, 1)
@@ -101,7 +127,7 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
 
   // Center content: emoji hover shows quotes, member hover shows name+quotes
   let centerContent: React.ReactNode = (
-    <div className="text-xs text-slate-300 text-center" style={{ fontSize: 11 }}>
+    <div style={{ fontSize: 11, color: c.textFaint, textAlign: 'center' }}>
       {members.length === 0 ? 'No members yet' : 'hover a member'}
     </div>
   )
@@ -111,12 +137,12 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
     if (hov) {
       centerContent = (
         <>
-          <div className="font-bold text-sm mb-1.5" style={{ color: memberColor(hov.userId), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: memberColor(hov.userId), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', marginBottom: 6 }}>
             {hov.name}
           </div>
           {hov.emojis.flatMap(e =>
             e.topQuotes.slice(0, 1).map((q, qi) => (
-              <div key={`${e.emojiId}-${qi}`} className="text-xs text-slate-500 leading-snug mb-1" style={{ fontSize: 10.5 }}>
+              <div key={`${e.emojiId}-${qi}`} style={{ fontSize: 10.5, color: c.textSub, lineHeight: 1.4, marginBottom: 4 }}>
                 "{q}"
               </div>
             ))
@@ -133,11 +159,11 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
     if (m && e && et) {
       centerContent = (
         <>
-          <div className="font-bold text-sm mb-1" style={{ color: memberColor(m.userId) }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: memberColor(m.userId), marginBottom: 4 }}>
             {et.emoji} {m.name}
           </div>
           {e.topQuotes.slice(0, 4).map((q, qi) => (
-            <div key={qi} className="text-xs text-slate-500 leading-snug mb-1" style={{ fontSize: 10 }}>
+            <div key={qi} style={{ fontSize: 10, color: c.textSub, lineHeight: 1.4, marginBottom: 3 }}>
               "{q}"
             </div>
           ))}
@@ -147,7 +173,7 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
   }
 
   return (
-    <div className="relative" style={{ width: '100%', maxWidth: SVG_SIZE, aspectRatio: '1 / 1' }}>
+    <div className="relative" style={{ width: '100%', maxWidth: SVG_SIZE, maxHeight: '100%', aspectRatio: '1 / 1' }}>
       <svg viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} width="100%" height="100%" style={{ display: 'block' }}>
         <defs>
           {/* The same gradient used on the Groups selector, applied to the whole ring */}
@@ -157,9 +183,9 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
             <stop offset="100%" stopColor="#c084fc" />
           </linearGradient>
           <radialGradient id="centerGrad" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#f8faff" />
-            <stop offset="70%" stopColor="#eef2ff" />
-            <stop offset="100%" stopColor="#f3f0ff" />
+            <stop offset="0%" stopColor={c.centerFill1} />
+            <stop offset="70%" stopColor={c.centerFill2} />
+            <stop offset="100%" stopColor={c.centerFill2} />
           </radialGradient>
           <filter id="sliceShadow" x="-10%" y="-10%" width="120%" height="120%">
             <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" />
@@ -293,14 +319,14 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
                 width={nameW}
                 height={nameH}
                 rx={8}
-                fill="rgba(200,210,225,0.65)"
+                fill={c.nameBadge}
                 style={{ pointerEvents: 'none' }}
               />
               <text
                 x={nameX + nameW / 2}
                 y={nameY + nameH / 2}
                 textAnchor="middle" dominantBaseline="central"
-                fill="#4b5563" fontSize={9} fontWeight={600}
+                fill={c.nameBadgeTxt} fontSize={9} fontWeight={600}
                 style={{ pointerEvents: 'none', userSelect: 'none' }}
               >
                 {displayName}
@@ -386,13 +412,15 @@ interface EventStatsProps {
   notComingMembers: RtMember[]
   hoveredStat: Status | null
   onStatHover: (s: Status | null) => void
+  darkMode: boolean
 }
 
 function EventStats({
   coming, notResponded, notComing,
   comingMembers, notRespondedMembers, notComingMembers,
-  hoveredStat, onStatHover,
+  hoveredStat, onStatHover, darkMode,
 }: EventStatsProps) {
+  const c = th(darkMode)
   const items: StatItem[] = [
     { status: 'coming',        count: coming,       label: 'Coming',        dotColor: '#4ade80', members: comingMembers,       tooltipAlign: 'left' },
     { status: 'not-responded', count: notResponded, label: 'Not Responded', dotColor: '#fb923c', members: notRespondedMembers, tooltipAlign: 'center' },
@@ -411,11 +439,11 @@ function EventStats({
           ...(hovItem.tooltipAlign === 'left'   ? { left: 0 } :
               hovItem.tooltipAlign === 'right'  ? { right: 0 } :
               { left: '50%', transform: 'translateX(-50%)' }),
-          background: 'white',
-          border: '1px solid #e5e7eb',
+          background: c.tooltipBg,
+          border: `1px solid ${c.border}`,
           borderRadius: 14,
           padding: '10px 12px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+          boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.10)',
           zIndex: 20,
           display: 'flex',
           alignItems: 'center',
@@ -443,8 +471,8 @@ function EventStats({
               onMouseLeave={() => onStatHover(null)}
             >
               <div className="w-2 h-2 rounded-full" style={{ background: item.dotColor }} />
-              <span className="text-sm font-semibold text-slate-700">{item.count}</span>
-              <span className="text-sm text-slate-400">{item.label}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{item.count}</span>
+              <span style={{ fontSize: 14, color: c.textSub }}>{item.label}</span>
             </div>
           </>
         ))}
@@ -455,7 +483,8 @@ function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: string, value: string) => void }) {
+function EventDetails({ group, onEdit, darkMode }: { group: Group | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
+  const c = th(darkMode)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
@@ -469,42 +498,43 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
       })
     : null
 
+  const fieldText: React.CSSProperties = { color: c.text, fontSize: 13, cursor: 'pointer', transition: 'color 0.15s' }
+  const placeholder: React.CSSProperties = { color: c.textFaint, fontStyle: 'italic', fontSize: 12 }
+  const editInput: React.CSSProperties = { flex: 1, borderBottom: `1.5px solid #60a5fa`, outline: 'none', fontSize: 13, background: 'transparent', color: c.text }
+
   return (
-    <div className="flex flex-col gap-2.5 text-sm">
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">📍</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📍</span>
         {editing === 'location' ? (
-          <input autoFocus className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
+          <input autoFocus style={editInput}
             value={draft} onChange={e => setDraft(e.target.value)}
             onBlur={() => save('location')} onKeyDown={e => e.key === 'Enter' && save('location')} />
         ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('location', group?.location ?? '')}>
-            {group?.location ?? <span className="text-slate-300 italic text-xs">Add location…</span>}
+          <span style={fieldText} onClick={() => startEdit('location', group?.location ?? '')}>
+            {group?.location ?? <span style={placeholder}>Add location…</span>}
           </span>
         )}
       </div>
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">🕐</span>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>🕐</span>
         {editing === 'eventTime' ? (
-          <input autoFocus type="datetime-local" className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
+          <input autoFocus type="datetime-local" style={{ ...editInput, colorScheme: darkMode ? 'dark' : 'light' }}
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
         ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('eventTime', group?.eventTime ? group.eventTime.slice(0, 16) : '')}>
-            {formatted ?? <span className="text-slate-300 italic text-xs">Add date & time…</span>}
+          <span style={fieldText} onClick={() => startEdit('eventTime', group?.eventTime ? group.eventTime.slice(0, 16) : '')}>
+            {formatted ?? <span style={placeholder}>Add date & time…</span>}
           </span>
         )}
       </div>
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">📄</span>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📄</span>
         {editing === 'description' ? (
-          <textarea autoFocus rows={2} className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent resize-none"
+          <textarea autoFocus rows={2} style={{ ...editInput, resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
         ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors leading-snug"
-            onClick={() => startEdit('description', group?.description ?? '')}>
-            {group?.description ?? <span className="text-slate-300 italic text-xs">Add description…</span>}
+          <span style={{ ...fieldText, lineHeight: 1.5 }} onClick={() => startEdit('description', group?.description ?? '')}>
+            {group?.description ?? <span style={placeholder}>Add description…</span>}
           </span>
         )}
       </div>
@@ -538,9 +568,11 @@ interface MessageItemProps {
   msg: Message
   meId: number | null
   compact?: boolean
+  darkMode: boolean
 }
 
-function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
+function MessageItem({ msg, meId, compact = false, darkMode }: MessageItemProps) {
+  const c = th(darkMode)
   const isMe = msg.sender.id === meId
   const color = memberColor(msg.sender.id)
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -559,7 +591,7 @@ function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
         }}>
           {msg.content}
         </div>
-        <span style={{ fontSize: 10, color: '#9ca3af', marginRight: 4 }}>{time}</span>
+        <span style={{ fontSize: 10, color: c.textFaint, marginRight: 4 }}>{time}</span>
       </div>
     )
   }
@@ -582,7 +614,7 @@ function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
           </div>
         )}
         <div style={{
-          background: '#f0f0f0', color: '#111827',
+          background: c.msgOtherBg, color: c.msgOtherTxt,
           borderRadius: compact ? '14px 14px 14px 3px' : '4px 18px 18px 18px',
           padding: compact ? '5px 11px' : '9px 15px',
           maxWidth: '78%',
@@ -592,7 +624,7 @@ function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
           {msg.content}
         </div>
       </div>
-      <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: compact ? 0 : 40 }}>{time}</span>
+      <span style={{ fontSize: 10, color: c.textFaint, marginLeft: compact ? 0 : 40 }}>{time}</span>
     </div>
   )
 }
@@ -655,8 +687,18 @@ export function EventPage() {
   const [suggestMsg, setSuggestMsg] = useState('')
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState('')
+  const [smallView, setSmallView] = useState<'roundtable' | 'chat'>('chat')
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const isSmall = windowWidth < 900
 
   useLayoutEffect(() => {
     const page = document.querySelector('.page') as HTMLElement | null
@@ -665,6 +707,12 @@ export function EventPage() {
     page.style.padding = '0'
     return () => { page.style.padding = prev }
   }, [])
+
+  // Sync dark mode to document so App.css header/body rules respond
+  useEffect(() => {
+    document.documentElement.dataset.dark = darkMode ? '1' : ''
+    return () => { document.documentElement.dataset.dark = '' }
+  }, [darkMode])
 
   useEffect(() => {
     apiGet<Me>('/auth/me').then(me => {
@@ -785,45 +833,78 @@ export function EventPage() {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
+  const c = th(darkMode)
+
   return (
     <div style={{
       position: 'fixed', top: 52, bottom: 0,
       left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 1380,
       overflow: 'hidden',
-      background: darkMode ? '#0f172a' : '#f3f4f6',
-      filter: darkMode ? 'brightness(0.7)' : 'none',
-      transition: 'background 0.2s, filter 0.2s',
+      background: c.pageBg,
+      transition: 'background 0.2s',
       zIndex: 0,
-      display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 12,
-      padding: 16, boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: isSmall ? 8 : 12,
+      padding: isSmall ? 8 : 16, boxSizing: 'border-box',
     }}>
 
       {/* Top group header */}
-      <div className="flex items-center gap-3 px-1">
-        <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 4px', flexShrink: 0 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{selectedGroup?.name ?? '—'}</div>
         <button
           type="button"
           title="Invite members"
           aria-label="Invite members"
-          className="ml-1 h-9 w-9 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+          style={{
+            marginLeft: 4, height: 36, width: 36, borderRadius: '50%',
+            border: `1px solid ${c.border}`, background: 'transparent',
+            color: c.textSub, cursor: 'pointer', flexShrink: 0, fontSize: 14,
+          }}
         >
           👤+
         </button>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium">Dark Mode</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 12, color: c.textSub, fontWeight: 500 }}>Dark Mode</span>
           <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
         </div>
       </div>
 
+      {/* Small-screen tab strip — toggles between roundtable and chat */}
+      {isSmall && (
+        <div style={{
+          display: 'flex', flexShrink: 0,
+          background: c.muted, borderRadius: 12, padding: 4, gap: 4,
+        }}>
+          {(['roundtable', 'chat'] as const).map(view => (
+            <button
+              key={view}
+              onClick={() => setSmallView(view)}
+              style={{
+                flex: 1, padding: '7px 0', borderRadius: 9, border: 'none',
+                background: smallView === view ? c.tabActiveBg : c.tabInactBg,
+                color: smallView === view ? c.text : c.textSub,
+                fontWeight: smallView === view ? 600 : 400,
+                fontSize: 13, cursor: 'pointer',
+                boxShadow: smallView === view ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            >
+              {view === 'roundtable' ? '🧑‍🤝‍🧑 Round Table' : '💬 Chat'}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
       {/* ── Left — Round Table ── */}
-      <div style={{
-        flex: '0 0 clamp(380px, 46%, 660px)', background: 'white',
-        borderRadius: 24, padding: '20px 20px 16px',
-        boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+      {(!isSmall || smallView === 'roundtable') && <div style={{
+        flex: isSmall ? '1' : '0 0 clamp(380px, 46%, 660px)',
+        background: c.panelBg,
+        borderRadius: 24, padding: '14px 16px 12px',
+        boxShadow: darkMode ? '0 1px 8px rgba(0,0,0,0.3)' : '0 1px 8px rgba(0,0,0,0.07)',
         display: 'flex', flexDirection: 'column',
         boxSizing: 'border-box', overflow: 'hidden', minHeight: 0,
+        transition: 'background 0.2s',
       }}>
 
         {/* Groups selector */}
@@ -853,6 +934,7 @@ export function EventPage() {
             hoveredEmoji={hoveredEmoji}
             onHover={setHoveredMember}
             onEmojiHover={setHoveredEmoji}
+            darkMode={darkMode}
           />
         </div>
 
@@ -866,24 +948,25 @@ export function EventPage() {
           notComingMembers={notComingMembers}
           hoveredStat={hoveredStat}
           onStatHover={setHoveredStat}
+          darkMode={darkMode}
         />
 
         {/* Event Details */}
         <div className="mt-1 px-1">
-          <EventDetails group={selectedGroup} onEdit={updateGroupField} />
+          <EventDetails group={selectedGroup} onEdit={updateGroupField} darkMode={darkMode} />
         </div>
-      </div>
+      </div>}
 
       {/* ── Right — Messaging ── */}
-      <div style={{
-        flex: 1, minWidth: 280, background: 'white',
-        borderRadius: 24, boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+      {(!isSmall || smallView === 'chat') && <div style={{
+        flex: 1, minWidth: isSmall ? 0 : 280, background: c.panelBg,
+        borderRadius: 24, boxShadow: darkMode ? '0 1px 8px rgba(0,0,0,0.3)' : '0 1px 8px rgba(0,0,0,0.07)',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        boxSizing: 'border-box',
+        boxSizing: 'border-box', transition: 'background 0.2s',
       }}>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #f3f4f6' }}>
+        <div style={{ display: 'flex', flexShrink: 0, borderBottom: `1px solid ${c.border}` }}>
           <button
             onClick={() => setCurrentView('suggest')}
             style={{
@@ -900,8 +983,8 @@ export function EventPage() {
             onClick={() => setCurrentView('current')}
             style={{
               flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'current' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'current' ? '#111827' : '#9ca3af',
+              background: currentView === 'current' ? c.muted : c.panelBg,
+              color: currentView === 'current' ? c.text : c.textFaint,
               border: 'none', cursor: 'pointer', borderRadius: '0 24px 0 0',
               transition: 'background 0.15s, color 0.15s',
             }}
@@ -912,10 +995,10 @@ export function EventPage() {
             onClick={() => setCurrentView('all')}
             style={{
               flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'all' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'all' ? '#111827' : '#9ca3af',
+              background: currentView === 'all' ? c.muted : c.panelBg,
+              color: currentView === 'all' ? c.text : c.textFaint,
               border: 'none', cursor: 'pointer',
-              borderLeft: '1px solid #f3f4f6',
+              borderLeft: `1px solid ${c.border}`,
               borderRadius: '0 24px 0 0',
               transition: 'background 0.15s, color 0.15s',
             }}
@@ -928,30 +1011,30 @@ export function EventPage() {
         {currentView === 'suggest' && (
           <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: '28px 32px', gap: 20 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Suggest a New Event</h3>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#9ca3af' }}>Create a group and kick off the conversation.</p>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: c.text }}>Suggest a New Event</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: c.textFaint }}>Create a group and kick off the conversation.</p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Event name</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: c.textSub }}>Event name</label>
               <input
                 value={suggestName}
                 onChange={e => setSuggestName(e.target.value)}
                 placeholder="e.g. Park Hangout Saturday"
-                style={{ borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '9px 14px', fontSize: 14, color: '#111827', outline: 'none', background: '#fafafa' }}
+                style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 14px', fontSize: 14, color: c.text, outline: 'none', background: c.inputBg }}
                 onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#93c5fd' }}
-                onBlur={e => { (e.target as HTMLInputElement).style.borderColor = '#e5e7eb' }}
+                onBlur={e => { (e.target as HTMLInputElement).style.borderColor = c.border }}
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Initial message</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: c.textSub }}>Initial message</label>
               <textarea
                 value={suggestMsg}
                 onChange={e => setSuggestMsg(e.target.value)}
                 placeholder="e.g. Hey everyone! Who's down for a park hangout this Saturday at 3pm?"
                 rows={4}
-                style={{ borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '9px 14px', fontSize: 14, color: '#111827', outline: 'none', background: '#fafafa', resize: 'none', fontFamily: 'inherit' }}
+                style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 14px', fontSize: 14, color: c.text, outline: 'none', background: c.inputBg, resize: 'none', fontFamily: 'inherit' }}
                 onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#93c5fd' }}
-                onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#e5e7eb' }}
+                onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = c.border }}
               />
             </div>
             {suggestError && <p style={{ margin: 0, fontSize: 13, color: '#ef4444' }}>{suggestError}</p>}
@@ -974,44 +1057,43 @@ export function EventPage() {
         {/* ── Current Events ── */}
         {currentView === 'current' && (
           <>
-            <div className="px-5 pt-4 pb-3 flex-shrink-0">
+            <div style={{ padding: '16px 20px 12px', flexShrink: 0 }}>
               <div>
-                <h2 className="font-bold text-[22px] text-slate-800 leading-tight">
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: c.text, lineHeight: 1.3 }}>
                   {selectedGroup?.name ?? 'Park Hangout'}
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Group Chat</p>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: c.textFaint }}>Group Chat</p>
               </div>
-              <div className="flex items-center gap-2 mt-2.5">
-                <span className="text-xs text-slate-500">For You Filter</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                <span style={{ fontSize: 12, color: c.textSub }}>For You Filter</span>
                 <Toggle on={aiSorted} onToggle={() => setAiSorted(v => !v)} />
               </div>
             </div>
 
-            <div style={{ height: 1, background: '#f3f4f6', flexShrink: 0 }} />
+            <div style={{ height: 1, background: c.border, flexShrink: 0 }} />
 
-            <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-3 min-h-0">
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
               {displayMessages.length === 0
-                ? <p className="text-xs text-slate-300 text-center mt-8">No messages yet</p>
+                ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>No messages yet</p>
                 : displayMessages.map(msg => (
-                    <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} />
+                    <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} darkMode={darkMode} />
                   ))
               }
               <div ref={messagesEndRef} />
             </div>
 
             {aiSorted && myRecentMessages.length > 0 && (
-              <div className="flex-shrink-0 px-5 py-2.5" style={{ borderTop: '1px solid #f3f4f6', background: '#fafafa' }}>
-                <p className="text-xs font-semibold text-slate-400 mb-2">Your Recent Messages</p>
-                <div className="flex flex-col gap-1.5" style={{ maxHeight: 140, overflowY: 'auto' }}>
-                  {myRecentMessages.map(msg => <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} compact />)}
+              <div style={{ flexShrink: 0, padding: '10px 20px', borderTop: `1px solid ${c.border}`, background: c.panelBg2 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: c.textFaint, margin: '0 0 8px' }}>Your Recent Messages</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
+                  {myRecentMessages.map(msg => <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} compact darkMode={darkMode} />)}
                 </div>
               </div>
             )}
 
-            <div className="flex-shrink-0 px-4 py-3 flex gap-2.5 items-center" style={{ borderTop: '1px solid #f3f4f6' }}>
+            <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', borderTop: `1px solid ${c.border}` }}>
               <input
-                className="flex-1 rounded-full px-4 py-2 text-sm outline-none text-slate-700"
-                style={{ background: '#f3f4f6', border: 'none' }}
+                style={{ flex: 1, borderRadius: 20, padding: '8px 16px', fontSize: 14, outline: 'none', background: c.inputBg, border: 'none', color: c.text }}
                 placeholder="Type a message..."
                 value={text}
                 onChange={e => setText(e.target.value)}
@@ -1019,8 +1101,7 @@ export function EventPage() {
               />
               <button
                 onClick={sendMessage}
-                className="flex-shrink-0 flex items-center justify-center rounded-full text-white font-bold text-base"
-                style={{ width: 38, height: 38, background: GRAD, border: 'none', cursor: 'pointer' }}
+                style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', background: GRAD, border: 'none', cursor: 'pointer', color: 'white', fontWeight: 700, fontSize: 16 }}
               >
                 ↑
               </button>
@@ -1030,9 +1111,9 @@ export function EventPage() {
 
         {currentView === 'all' && (
           <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-            <h3 className="m-0 text-base font-semibold text-slate-800">All Events</h3>
-            <p className="mt-1 mb-4 text-xs text-slate-400">Select an event in this group.</p>
-            <div className="flex flex-col gap-2">
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: c.text }}>All Events</h3>
+            <p style={{ marginTop: 4, marginBottom: 16, fontSize: 12, color: c.textFaint }}>Select an event in this group.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {allEventItems.map(event => (
                 <button
                   key={event.id}
@@ -1041,20 +1122,21 @@ export function EventPage() {
                     if (group) setSelectedGroup(group)
                     setCurrentView('current')
                   }}
-                  className="w-full text-left rounded-xl border px-3 py-2.5 transition-colors"
                   style={{
-                    borderColor: selectedGroup?.id === event.id ? '#93c5fd' : '#e5e7eb',
-                    background: selectedGroup?.id === event.id ? '#eff6ff' : 'white',
+                    width: '100%', textAlign: 'left', borderRadius: 12,
+                    border: `1.5px solid ${selectedGroup?.id === event.id ? '#93c5fd' : c.border}`,
+                    padding: '10px 14px', cursor: 'pointer',
+                    background: selectedGroup?.id === event.id ? (darkMode ? '#1e3a5f' : '#eff6ff') : c.panelBg,
                   }}
                 >
-                  <div className="text-sm font-medium text-slate-800">{event.name}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{event.subtitle}</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{event.name}</div>
+                  <div style={{ fontSize: 12, color: c.textFaint, marginTop: 2 }}>{event.subtitle}</div>
                 </button>
               ))}
             </div>
           </div>
         )}
-      </div>
+      </div>}
       </div>
     </div>
   )

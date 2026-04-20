@@ -1,5 +1,7 @@
 .app {
   min-height: 100vh;
+  background: #f3f4f6;
+  transition: background 0.2s;
 }
 
 .header {
@@ -9,6 +11,21 @@
   align-items: center;
   justify-content: flex-end;
   background: white;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* ── Dark mode overrides ── */
+html[data-dark="1"] body {
+  background: #0f172a;
+}
+
+html[data-dark="1"] .app {
+  background: #0f172a;
+}
+
+html[data-dark="1"] .header {
+  background: #1e293b;
+  border-bottom-color: #334155;
 }
 
 .nav {
