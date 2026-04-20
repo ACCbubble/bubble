@@ -1,14 +1,15 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiGet, apiPatch, apiPost } from '../api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface Me { userId: number; name: string }
 interface Group {
-  id: number; name: string | null
-  location: string | null; eventTime: string | null; description: string | null
+  id: number
+  name: string | null
+  location: string | null
+  eventTime: string | null
+  description: string | null
 }
 interface EmojiType { id: number; name: string; emoji: string }
 interface RtEmoji { emojiId: number; score: number; topQuotes: string[] }
@@ -19,606 +20,314 @@ interface FeedMessage extends Message { relevanceScore: number }
 interface UserAttribute { key: string; score: number }
 
 type Status = 'coming' | 'not-responded' | 'not-coming'
+type View = 'suggest' | 'current' | 'all'
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+const GRADIENT = 'linear-gradient(135deg, #63b7ff 0%, #6159ff 100%)'
+const PANEL_BG = '#ffffff'
+const SHELL_BG = '#f7f8fc'
 
 const MOCK_EMOJI_MAP: Record<number, EmojiType> = {
-  1: { id: 1, name: 'coming', emoji: '✅' },
-  2: { id: 2, name: 'needs_ride', emoji: '🚗' },
-  3: { id: 3, name: 'bringing_food', emoji: '🍕' },
+  1: { id: 1, name: 'coming', emoji: '👍' },
+  2: { id: 2, name: 'needs_ride', emoji: '❓' },
+  3: { id: 3, name: 'bringing_food', emoji: '🎮' },
 }
 
 const MOCK_ROUNDTABLE: Roundtable = {
   members: [
-    { userId: 1, name: 'Andy', emojis: [
-      { emojiId: 1, score: 0.9, topQuotes: ["I'm in! What time should we meet?", "Count me in for sure", "See you all there!", "Can't wait"] },
-      { emojiId: 2, score: 0.7, topQuotes: ["I can give people rides if needed", "I have space for 3", "Happy to drive"] },
-    ]},
-    { userId: 2, name: 'Sidney', emojis: [] },
-    { userId: 3, name: 'Bartholomew', emojis: [] },
-    { userId: 4, name: 'Colin', emojis: [
-      { emojiId: 1, score: 0.85, topQuotes: ["Perfect! See you all there", "Definitely coming", "I'll be there at 6", "Excited!"] },
-      { emojiId: 3, score: 0.8, topQuotes: ["I'll bring snacks!", "Bringing chips and dip", "Happy to bring food"] },
-    ]},
-    { userId: 5, name: 'Christopher', emojis: [] },
-    { userId: 6, name: 'Manasa', emojis: [] },
-  ]
+    { userId: 1, name: 'Andy', emojis: [{ emojiId: 1, score: 0.9, topQuotes: ['I\'m in! What time should we meet?'] }] },
+    { userId: 2, name: 'Sidney', emojis: [{ emojiId: 2, score: 0.8, topQuotes: ['Not sure yet'] }] },
+    { userId: 3, name: 'Anikar', emojis: [{ emojiId: 2, score: 0.3, topQuotes: ['Depends on work'] }] },
+    { userId: 4, name: 'Colin', emojis: [{ emojiId: 3, score: 0.8, topQuotes: ['I\'ll bring some games!'] }] },
+    { userId: 5, name: 'Rohan', emojis: [{ emojiId: 3, score: 0.8, topQuotes: ['I can give people rides if needed'] }] },
+    { userId: 6, name: 'Manasa', emojis: [{ emojiId: 2, score: 0.7, topQuotes: ['Thinking...'] }] },
+  ],
 }
 
 const MOCK_MESSAGES: Message[] = [
-  { id: 1, content: "Perfect! See you all there", createdAt: new Date(Date.now() - 23 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
-  { id: 2, content: "I might not make it, got a work thing", createdAt: new Date(Date.now() - 20 * 60000).toISOString(), sender: { id: 5, name: 'Rohan' } },
-  { id: 3, content: "I'm in! What time should we meet?", createdAt: new Date(Date.now() - 26 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 4, content: "I can give people rides if needed", createdAt: new Date(Date.now() - 18 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 5, content: "I'll bring some games!", createdAt: new Date(Date.now() - 15 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
+  { id: 1, content: 'Perfect! See you all there', createdAt: new Date(Date.now() - 23 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
+  { id: 2, content: 'I might not make it, got a work thing', createdAt: new Date(Date.now() - 20 * 60000).toISOString(), sender: { id: 5, name: 'Rohan' } },
+  { id: 3, content: 'I\'m in! What time should we meet?', createdAt: new Date(Date.now() - 26 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
+  { id: 4, content: 'I can give people rides if needed', createdAt: new Date(Date.now() - 18 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
+  { id: 5, content: 'I\'ll bring some games!', createdAt: new Date(Date.now() - 15 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
 ]
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+const AVATAR_COLORS = ['#4f79ff', '#5ac8fa', '#50c878', '#8a7dff', '#ff7f7f', '#ffaa66']
+const SEGMENT_COLORS = ['#5fb6ff', '#74d6d5', '#f3cf6e', '#f3a672', '#f08ab2', '#a788e8']
 
-const GRAD = 'linear-gradient(135deg, #86efac 0%, #60a5fa 50%, #c084fc 100%)'
-
-const MEMBER_COLORS = [
-  '#3b82f6', '#10b981', '#f97316', '#8b5cf6',
-  '#ef4444', '#0ea5e9', '#f59e0b', '#22c55e',
-]
-
-function memberColor(userId: number) { return MEMBER_COLORS[userId % MEMBER_COLORS.length] }
-
-// ─── SVG Donut Ring ───────────────────────────────────────────────────────────
-
-const SVG_SIZE = 560
-const CX = SVG_SIZE / 2, CY = SVG_SIZE / 2
-const OUTER = 192, INNER = 137, AVATAR_R = 234
-
-function polar(r: number, deg: number) {
-  const rad = (deg - 90) * Math.PI / 180
-  return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) }
+function memberColor(id: number) {
+  return AVATAR_COLORS[id % AVATAR_COLORS.length]
 }
 
-function slicePath(startDeg: number, endDeg: number) {
-  const large = endDeg - startDeg > 180 ? 1 : 0
-  const o1 = polar(OUTER, startDeg), o2 = polar(OUTER, endDeg)
-  const i1 = polar(INNER, startDeg), i2 = polar(INNER, endDeg)
-  return `M ${o1.x} ${o1.y} A ${OUTER} ${OUTER} 0 ${large} 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${INNER} ${INNER} 0 ${large} 0 ${i1.x} ${i1.y} Z`
+function initials(name: string) {
+  return (name.trim()[0] ?? '?').toUpperCase()
 }
 
-interface HoveredEmoji { memberId: number; emojiId: number }
-
-interface DonutRingProps {
-  members: RtMember[]
-  emojiMap: Record<number, EmojiType>
-  hoveredMember: number | null
-  hoveredEmoji: HoveredEmoji | null
-  onHover: (id: number | null) => void
-  onEmojiHover: (val: HoveredEmoji | null) => void
+function angleToXY(cx: number, cy: number, r: number, deg: number) {
+  const rad = (deg - 90) * (Math.PI / 180)
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
 }
 
-function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, onEmojiHover }: DonutRingProps) {
-  const n = members.length
-  const GAP = n > 1 ? 1.0 : 0
-  const degPer = 360 / Math.max(n, 1)
-  const EMOJI_R = (INNER + OUTER) / 2  // mid of the ring band
+function arcSlicePath(cx: number, cy: number, outerR: number, innerR: number, start: number, end: number) {
+  const large = end - start > 180 ? 1 : 0
+  const p1 = angleToXY(cx, cy, outerR, start)
+  const p2 = angleToXY(cx, cy, outerR, end)
+  const p3 = angleToXY(cx, cy, innerR, end)
+  const p4 = angleToXY(cx, cy, innerR, start)
+  return `M ${p1.x} ${p1.y} A ${outerR} ${outerR} 0 ${large} 1 ${p2.x} ${p2.y} L ${p3.x} ${p3.y} A ${innerR} ${innerR} 0 ${large} 0 ${p4.x} ${p4.y} Z`
+}
 
-  // Center content: emoji hover shows quotes, member hover shows name+quotes
-  let centerContent: React.ReactNode = (
-    <div className="text-xs text-slate-300 text-center" style={{ fontSize: 11 }}>
-      {members.length === 0 ? 'No members yet' : 'hover a member'}
-    </div>
-  )
-
-  if (hoveredMember !== null) {
-    const hov = members.find(m => m.userId === hoveredMember) ?? null
-    if (hov) {
-      centerContent = (
-        <>
-          <div className="font-bold text-sm mb-1.5" style={{ color: memberColor(hov.userId) }}>
-            {hov.name}
-          </div>
-          {hov.emojis.flatMap(e =>
-            e.topQuotes.slice(0, 1).map((q, qi) => (
-              <div key={`${e.emojiId}-${qi}`} className="text-xs text-slate-500 leading-snug mb-1" style={{ fontSize: 10.5 }}>
-                "{q}"
-              </div>
-            ))
-          ).slice(0, 2)}
-        </>
-      )
-    }
-  }
-
-  if (hoveredEmoji) {
-    const m = members.find(m => m.userId === hoveredEmoji.memberId)
-    const e = m?.emojis.find(e => e.emojiId === hoveredEmoji.emojiId)
-    const et = emojiMap[hoveredEmoji.emojiId]
-    if (m && e && et) {
-      centerContent = (
-        <>
-          <div className="font-bold text-sm mb-1" style={{ color: memberColor(m.userId) }}>
-            {et.emoji} {m.name}
-          </div>
-          {e.topQuotes.slice(0, 4).map((q, qi) => (
-            <div key={qi} className="text-xs text-slate-500 leading-snug mb-1" style={{ fontSize: 10 }}>
-              "{q}"
-            </div>
-          ))}
-        </>
-      )
-    }
-  }
-
+function ForYouToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
-    <div className="relative flex-shrink-0" style={{ width: SVG_SIZE, height: SVG_SIZE }}>
-      <svg width={SVG_SIZE} height={SVG_SIZE}>
-        <defs>
-          {/* The same gradient used on the Groups selector, applied to the whole ring */}
-          <linearGradient id="ringGrad" x1={CX - OUTER} y1={CY - OUTER} x2={CX + OUTER} y2={CY + OUTER} gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#86efac" />
-            <stop offset="50%" stopColor="#60a5fa" />
-            <stop offset="100%" stopColor="#c084fc" />
-          </linearGradient>
-          <radialGradient id="centerGrad" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#f8faff" />
-            <stop offset="70%" stopColor="#eef2ff" />
-            <stop offset="100%" stopColor="#f3f0ff" />
-          </radialGradient>
-          <filter id="sliceShadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" />
-          </filter>
-        </defs>
-
-        {/* Center fill */}
-        <circle cx={CX} cy={CY} r={INNER - 1} fill="url(#centerGrad)" />
-
-        {/* Slices — all use the unified ring gradient */}
-        {members.map((m, i) => {
-          const start = i * degPer + GAP
-          const end = (i + 1) * degPer - GAP
-          const isHov = m.userId === hoveredMember
-          const midDeg = (start + end) / 2
-          const nudge = isHov ? 7 : 0
-          const nudgeX = nudge * Math.cos((midDeg - 90) * Math.PI / 180)
-          const nudgeY = nudge * Math.sin((midDeg - 90) * Math.PI / 180)
-          return (
-            <path
-              key={m.userId}
-              d={slicePath(start, end)}
-              fill="url(#ringGrad)"
-              opacity={hoveredMember !== null && !isHov ? 0.45 : 1}
-              stroke="white"
-              strokeWidth={1.5}
-              filter="url(#sliceShadow)"
-              style={{
-                cursor: 'pointer',
-                transform: `translate(${nudgeX}px, ${nudgeY}px)`,
-                transition: 'opacity 0.2s, transform 0.2s',
-              }}
-              onMouseEnter={() => onHover(m.userId)}
-              onMouseLeave={() => onHover(null)}
-            />
-          )
-        })}
-
-        {/* Emojis floating inside the ring band */}
-        {members.map((m, i) => {
-          const start = i * degPer + GAP
-          const end = (i + 1) * degPer - GAP
-          const midDeg = (start + end) / 2
-          const isHov = m.userId === hoveredMember
-          const nudge = isHov ? 7 : 0
-          const nudgeX = nudge * Math.cos((midDeg - 90) * Math.PI / 180)
-          const nudgeY = nudge * Math.sin((midDeg - 90) * Math.PI / 180)
-          const visibleEmojis = m.emojis.filter(e => emojiMap[e.emojiId]).slice(0, 3)
-          const count = visibleEmojis.length
-          if (count === 0) return null
-          return (
-            <g
-              key={`emojis-${m.userId}`}
-              style={{ transform: `translate(${nudgeX}px, ${nudgeY}px)`, transition: 'transform 0.2s' }}
-            >
-              {visibleEmojis.map((e, ei) => {
-                const spreadDeg = count > 1 ? (ei - (count - 1) / 2) * 10 : 0
-                const pos = polar(EMOJI_R, midDeg + spreadDeg)
-                const et = emojiMap[e.emojiId]
-                const isHovEmo = hoveredEmoji?.memberId === m.userId && hoveredEmoji?.emojiId === e.emojiId
-                return (
-                  <text
-                    key={e.emojiId}
-                    x={pos.x} y={pos.y}
-                    textAnchor="middle" dominantBaseline="central"
-                    fontSize={isHovEmo ? 24 : 16}
-                    style={{
-                      cursor: 'pointer',
-                      transition: 'font-size 0.15s',
-                      userSelect: 'none',
-                      filter: isHovEmo ? 'drop-shadow(0 0 5px rgba(0,0,0,0.3))' : undefined,
-                    }}
-                    onMouseEnter={ev => { ev.stopPropagation(); onEmojiHover({ memberId: m.userId, emojiId: e.emojiId }) }}
-                    onMouseLeave={ev => { ev.stopPropagation(); onEmojiHover(null) }}
-                  >
-                    {et.emoji}
-                  </text>
-                )
-              })}
-            </g>
-          )
-        })}
-
-        {/* Avatars — outside the ring */}
-        {members.map((m, i) => {
-          const midDeg = (i + 0.5) * degPer
-          const pos = polar(AVATAR_R, midDeg)
-          const color = memberColor(m.userId)
-          const isHov = m.userId === hoveredMember
-          // Name badge: positioned radially outward from the avatar center so it
-          // always points away from the ring — never back toward or into the chart.
-          // 7px per char is generous enough for typical fonts at fontSize=9
-          const nameW = Math.max(m.name.length * 7 + 18, 36)
-          const nameH = 16
-          // Always place the badge directly below the avatar and keep it centered.
-          const nameY = pos.y + 22   // top of badge (avatar bottom + 2px gap)
-          const nameX = pos.x - nameW / 2
-
-          return (
-            <g
-              key={m.userId}
-              style={{ cursor: 'pointer' }}
-              onMouseEnter={() => onHover(m.userId)}
-              onMouseLeave={() => onHover(null)}
-            >
-              {isHov && (
-                <circle cx={pos.x} cy={pos.y} r={26} fill={color} opacity={0.18} />
-              )}
-              <circle
-                cx={pos.x} cy={pos.y} r={20}
-                fill={color}
-                stroke="white"
-                strokeWidth={isHov ? 3 : 2}
-                style={{ transition: 'stroke-width 0.15s' }}
-              />
-              <text
-                x={pos.x} y={pos.y}
-                textAnchor="middle" dominantBaseline="central"
-                fill="white" fontSize={12} fontWeight={700}
-                style={{ pointerEvents: 'none', userSelect: 'none' }}
-              >
-                {m.name[0].toUpperCase()}
-              </text>
-              {/* Name badge — centered directly under avatar */}
-              <rect
-                x={nameX}
-                y={nameY}
-                width={nameW}
-                height={nameH}
-                rx={8}
-                fill="rgba(200,210,225,0.65)"
-                style={{ pointerEvents: 'none' }}
-              />
-              <text
-                x={nameX + nameW / 2}
-                y={nameY + nameH / 2}
-                textAnchor="middle" dominantBaseline="central"
-                fill="#4b5563" fontSize={9} fontWeight={600}
-                style={{ pointerEvents: 'none', userSelect: 'none' }}
-              >
-                {m.name}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
-
-      {/* Center info overlay */}
-      <div
-        className="absolute pointer-events-none flex flex-col items-center justify-center text-center"
-        style={{
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: (INNER - 6) * 2,
-          height: (INNER - 6) * 2,
-          borderRadius: '50%',
-          padding: 14,
-          overflow: 'hidden',
-        }}
-      >
-        {centerContent}
-      </div>
-    </div>
-  )
-}
-
-// ─── Event Stats ──────────────────────────────────────────────────────────────
-
-// Small avatar circle that shows the member's name in a tooltip on hover
-function AvatarBadge({ member, dotColor }: { member: RtMember; dotColor: string }) {
-  const [hov, setHov] = useState(false)
-  const color = memberColor(member.userId)
-  return (
-    <div
-      style={{ position: 'relative', flexShrink: 0 }}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+    <button
+      onClick={onToggle}
+      style={{
+        width: 62,
+        height: 38,
+        borderRadius: 20,
+        border: 'none',
+        background: on ? GRADIENT : '#d9deea',
+        position: 'relative',
+        cursor: 'pointer',
+      }}
     >
-      <div style={{
-        width: 32, height: 32, borderRadius: '50%',
-        background: color,
-        border: `2px solid ${dotColor}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'white', fontSize: 12, fontWeight: 700,
-        cursor: 'default', transition: 'transform 0.15s',
-        transform: hov ? 'scale(1.15)' : 'scale(1)',
-      }}>
-        {member.name[0].toUpperCase()}
-      </div>
-      {hov && (
-        <div style={{
-          position: 'absolute', bottom: 'calc(100% + 5px)', left: '50%',
-          transform: 'translateX(-50%)',
-          background: '#1e293b', color: 'white',
-          fontSize: 11, fontWeight: 600,
-          padding: '3px 8px', borderRadius: 6,
-          whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 30,
-        }}>
-          {member.name}
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface StatItem {
-  status: Status
-  count: number
-  label: string
-  dotColor: string
-  members: RtMember[]
-  tooltipAlign: 'left' | 'center' | 'right'
-}
-
-interface EventStatsProps {
-  coming: number
-  notResponded: number
-  notComing: number
-  comingMembers: RtMember[]
-  notRespondedMembers: RtMember[]
-  notComingMembers: RtMember[]
-  hoveredStat: Status | null
-  onStatHover: (s: Status | null) => void
-}
-
-function EventStats({
-  coming, notResponded, notComing,
-  comingMembers, notRespondedMembers, notComingMembers,
-  hoveredStat, onStatHover,
-}: EventStatsProps) {
-  const items: StatItem[] = [
-    { status: 'coming',        count: coming,       label: 'Coming',        dotColor: '#4ade80', members: comingMembers,       tooltipAlign: 'left' },
-    { status: 'not-responded', count: notResponded, label: 'Not Responded', dotColor: '#fb923c', members: notRespondedMembers, tooltipAlign: 'center' },
-    { status: 'not-coming',    count: notComing,    label: 'Not Coming',    dotColor: '#f87171', members: notComingMembers,     tooltipAlign: 'right' },
-  ]
-
-  const hovItem = items.find(i => i.status === hoveredStat)
-
-  return (
-    <div style={{ position: 'relative' }}>
-      {/* Tooltip — avatar circles with name shown on hover of each circle */}
-      {hovItem && hovItem.members.length > 0 && (
-        <div style={{
+      <span
+        style={{
           position: 'absolute',
-          bottom: 'calc(100% + 6px)',
-          ...(hovItem.tooltipAlign === 'left'   ? { left: 0 } :
-              hovItem.tooltipAlign === 'right'  ? { right: 0 } :
-              { left: '50%', transform: 'translateX(-50%)' }),
-          background: 'white',
-          border: '1px solid #e5e7eb',
-          borderRadius: 14,
-          padding: '10px 12px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-          zIndex: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-        }}>
-          {hovItem.members.map(m => (
-            <AvatarBadge key={m.userId} member={m} dotColor={hovItem.dotColor} />
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center justify-center gap-5 py-2">
-        {items.map((item, i) => (
-          <>
-            {i > 0 && <div key={`sep-${i}`} style={{ width: 1, height: 14, background: '#e5e7eb' }} />}
-            <div
-              key={item.status}
-              className="flex items-center gap-1.5"
-              style={{
-                cursor: 'default',
-                opacity: hoveredStat && hoveredStat !== item.status ? 0.4 : 1,
-                transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={() => onStatHover(item.status)}
-              onMouseLeave={() => onStatHover(null)}
-            >
-              <div className="w-2 h-2 rounded-full" style={{ background: item.dotColor }} />
-              <span className="text-sm font-semibold text-slate-700">{item.count}</span>
-              <span className="text-sm text-slate-400">{item.label}</span>
-            </div>
-          </>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Event Details ────────────────────────────────────────────────────────────
-
-function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: string, value: string) => void }) {
-  const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-
-  function startEdit(field: string, current: string) { setEditing(field); setDraft(current) }
-  function save(field: string) { onEdit(field, draft); setEditing(null) }
-
-  const formatted = group?.eventTime
-    ? new Date(group.eventTime).toLocaleDateString('en-US', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-        hour: 'numeric', minute: '2-digit',
-      })
-    : null
-
-  return (
-    <div className="flex flex-col gap-2.5 text-sm">
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">📍</span>
-        {editing === 'location' ? (
-          <input autoFocus className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
-            value={draft} onChange={e => setDraft(e.target.value)}
-            onBlur={() => save('location')} onKeyDown={e => e.key === 'Enter' && save('location')} />
-        ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('location', group?.location ?? '')}>
-            {group?.location ?? <span className="text-slate-300 italic text-xs">Add location…</span>}
-          </span>
-        )}
-      </div>
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">🕐</span>
-        {editing === 'eventTime' ? (
-          <input autoFocus type="datetime-local" className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
-            value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
-        ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('eventTime', group?.eventTime ? group.eventTime.slice(0, 16) : '')}>
-            {formatted ?? <span className="text-slate-300 italic text-xs">Add date & time…</span>}
-          </span>
-        )}
-      </div>
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">📄</span>
-        {editing === 'description' ? (
-          <textarea autoFocus rows={2} className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent resize-none"
-            value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
-        ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors leading-snug"
-            onClick={() => startEdit('description', group?.description ?? '')}>
-            {group?.description ?? <span className="text-slate-300 italic text-xs">Add description…</span>}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Toggle Switch ────────────────────────────────────────────────────────────
-
-function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
-  return (
-    <button onClick={onToggle} style={{
-      position: 'relative', width: 36, height: 20, borderRadius: 10,
-      background: on ? GRAD : '#cbd5e1',
-      border: 'none', cursor: 'pointer', flexShrink: 0,
-      transition: 'background 0.2s',
-    }}>
-      <span style={{
-        position: 'absolute', width: 14, height: 14, borderRadius: '50%', background: 'white',
-        top: 3, left: on ? 19 : 3,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-        transition: 'left 0.2s',
-      }} />
+          top: 4,
+          left: on ? 28 : 4,
+          width: 30,
+          height: 30,
+          borderRadius: '50%',
+          background: '#fff',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+          transition: 'left 0.2s',
+        }}
+      />
     </button>
   )
 }
 
-// ─── Message Item (iOS-style bubbles) ─────────────────────────────────────────
+function SegmentDonut({ members }: { members: RtMember[] }) {
+  const size = 620
+  const center = size / 2
+  const outer = 170
+  const inner = 110
+  const count = Math.max(members.length, 6)
+  const each = 360 / count
 
-interface MessageItemProps {
-  msg: Message
-  meId: number | null
-  compact?: boolean
-}
-
-function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
-  const isMe = msg.sender.id === meId
-  const color = memberColor(msg.sender.id)
-  const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-  const fontSize = compact ? 12 : 15
-
-  if (isMe) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-        <div style={{
-          background: GRAD, color: 'white',
-          borderRadius: compact ? '14px 14px 3px 14px' : '18px 18px 4px 18px',
-          padding: compact ? '5px 11px' : '9px 15px',
-          maxWidth: '78%',
-          fontSize, lineHeight: 1.4, wordBreak: 'break-word',
-          boxShadow: '0 1px 3px rgba(96,165,250,0.20)',
-        }}>
-          {msg.content}
-        </div>
-        <span style={{ fontSize: 10, color: '#9ca3af', marginRight: 4 }}>{time}</span>
-      </div>
-    )
-  }
+  const labels = members.slice(0, 6)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-      {!compact && (
-        <span style={{ fontSize: 11, fontWeight: 600, color, marginLeft: compact ? 0 : 40 }}>
-          {msg.sender.name}
-        </span>
-      )}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-        {!compact && (
-          <div style={{
-            flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
-            background: color, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontSize: 11, fontWeight: 700,
-          }}>
-            {msg.sender.name[0].toUpperCase()}
-          </div>
-        )}
-        <div style={{
-          background: '#f0f0f0', color: '#111827',
-          borderRadius: compact ? '14px 14px 14px 3px' : '4px 18px 18px 18px',
-          padding: compact ? '5px 11px' : '9px 15px',
-          maxWidth: '78%',
-          fontSize, lineHeight: 1.4, wordBreak: 'break-word',
-        }}>
-          {compact && <span style={{ fontWeight: 600, color, fontSize: 11, display: 'block', marginBottom: 2 }}>{msg.sender.name}</span>}
-          {msg.content}
-        </div>
+    <div style={{ width: size, height: size, position: 'relative' }}>
+      <svg width={size} height={size}>
+        {new Array(6).fill(0).map((_, i) => {
+          const start = i * each
+          const end = start + each
+          return (
+            <path
+              key={i}
+              d={arcSlicePath(center, center, outer, inner, start + 0.8, end - 0.8)}
+              fill={SEGMENT_COLORS[i]}
+              opacity={0.92}
+              stroke="#fff"
+              strokeWidth={3}
+            />
+          )
+        })}
+
+        <circle cx={center} cy={center} r={inner - 2} fill="#fff" />
+      </svg>
+
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          color: '#9aa5c7',
+          pointerEvents: 'none',
+          textAlign: 'center',
+          fontSize: 16,
+        }}
+      >
+        <div style={{ fontSize: 28, marginBottom: 12 }}>☝️</div>
+        <div>Hover over segments</div>
+        <div>to see details</div>
       </div>
-      <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: compact ? 0 : 40 }}>{time}</span>
+
+      {labels.map((m, i) => {
+        const a = i * 60 + 30
+        const p = angleToXY(center, center, 237, a)
+        return (
+          <div
+            key={m.userId}
+            style={{
+              position: 'absolute',
+              left: p.x - 58,
+              top: p.y - 20,
+              width: 116,
+              height: 40,
+              borderRadius: 22,
+              border: '1px solid #ebeff7',
+              background: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '0 8px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                background: memberColor(m.userId),
+                color: '#fff',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+              }}
+            >
+              {initials(m.name)}
+            </div>
+            <span style={{ fontSize: 18, color: '#4a587f' }}>{m.name}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+function MessageRow({ msg }: { msg: Message }) {
+  const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const color = memberColor(msg.sender.id)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: color,
+            color: '#fff',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+          }}
+        >
+          {initials(msg.sender.name)}
+        </div>
+        <span style={{ color: '#2f3f72', fontSize: 16, lineHeight: '12px' }}>{msg.sender.name}</span>
+        <span style={{ color: '#acb6d1', fontSize: 12, lineHeight: '12px' }}>{time}</span>
+      </div>
+
+      <div
+        style={{
+          marginLeft: 38,
+          display: 'inline-block',
+          background: '#f3f6fb',
+          color: '#4c5f8f',
+          borderRadius: 18,
+          padding: '10px 16px',
+          fontSize: 15,
+          lineHeight: 1.3,
+          maxWidth: '86%',
+        }}
+      >
+        {msg.content}
+      </div>
+    </div>
+  )
+}
+
+function DetailRow({
+  icon,
+  label,
+  value,
+  placeholder,
+  onSave,
+  isTime,
+}: {
+  icon: string
+  label: string
+  value: string | null
+  placeholder: string
+  onSave: (value: string) => void
+  isTime?: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const display = isTime && value
+    ? new Date(value).toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      })
+    : value
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderBottom: '1px solid #edf1f8' }}>
+      <span style={{ fontSize: 16 }}>{icon}</span>
+      <span style={{ color: '#b4bed7', minWidth: 90 }}>{label}</span>
+      {editing ? (
+        isTime ? (
+          <input
+            autoFocus
+            type="datetime-local"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => { onSave(draft); setEditing(false) }}
+            style={{ flex: 1, border: 'none', borderBottom: '1px solid #99b8ff', outline: 'none', background: 'transparent' }}
+          />
+        ) : (
+          <input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => { onSave(draft); setEditing(false) }}
+            onKeyDown={e => { if (e.key === 'Enter') { onSave(draft); setEditing(false) } }}
+            style={{ flex: 1, border: 'none', borderBottom: '1px solid #99b8ff', outline: 'none', background: 'transparent' }}
+          />
+        )
+      ) : (
+        <span
+          style={{ color: display ? '#4a587f' : '#c2cade', cursor: 'pointer' }}
+          onClick={() => { setDraft(isTime && value ? value.slice(0, 16) : (value ?? '')); setEditing(true) }}
+        >
+          {display || placeholder}
+        </span>
+      )}
+    </div>
+  )
+}
 
 function getMemberStatus(member: RtMember, comingEmojiId: number | null): Status {
   if (!comingEmojiId) return 'not-responded'
-  const e = member.emojis.find(e => e.emojiId === comingEmojiId)
-  if (!e) return 'not-responded'
-  return e.score >= 0.4 ? 'coming' : 'not-coming'
+  const incoming = member.emojis.find(e => e.emojiId === comingEmojiId)
+  if (!incoming) return 'not-responded'
+  return incoming.score >= 0.4 ? 'coming' : 'not-coming'
 }
 
-function memberRelevance(m: RtMember, emojiMap: Record<number, EmojiType>, attrs: Record<string, number>): number {
+function relevance(m: RtMember, emojiMap: Record<number, EmojiType>, attrs: Record<string, number>) {
   let score = 0
   for (const e of m.emojis) {
     const name = emojiMap[e.emojiId]?.name
     if (!name) continue
-    const rel = name === 'needs_ride' ? (attrs['has_car'] ?? 0)
-              : name === 'bringing_food' ? (attrs['has_dietary_restriction'] ?? 0)
-              : name === 'coming' ? 1.0 : 0.5
+    const rel = name === 'needs_ride' ? (attrs.has_car ?? 0)
+      : name === 'bringing_food' ? (attrs.has_dietary_restriction ?? 0)
+      : 1
     score += rel * e.score
   }
   return score
 }
-
-const RELEVANCE_THRESHOLD = 0.05
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function EventPage() {
   const [me, setMe] = useState<Me | null>(null)
@@ -629,85 +338,118 @@ export function EventPage() {
   const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES)
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
   const [userAttrs, setUserAttrs] = useState<Record<string, number>>({})
+
+  const [view, setView] = useState<View>('current')
+  const [forYou, setForYou] = useState(true)
   const [text, setText] = useState('')
-  const [hoveredMember, setHoveredMember] = useState<number | null>(null)
-  const [hoveredEmoji, setHoveredEmoji] = useState<HoveredEmoji | null>(null)
-  const [hoveredStat, setHoveredStat] = useState<Status | null>(null)
-  const [currentView, setCurrentView] = useState<'suggest' | 'current' | 'all'>('current')
-  const [darkMode, setDarkMode] = useState(false)
-  const [aiSorted, setAiSorted] = useState(true)
   const [suggestName, setSuggestName] = useState('')
   const [suggestMsg, setSuggestMsg] = useState('')
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState('')
+
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  useLayoutEffect(() => {
-    const page = document.querySelector('.page') as HTMLElement | null
-    if (!page) return
-    const prev = page.style.padding
-    page.style.padding = '0'
-    return () => { page.style.padding = prev }
-  }, [])
-
   useEffect(() => {
-    apiGet<Me>('/auth/me').then(me => {
-      setMe(me)
-      apiGet<{ attributes: UserAttribute[] }>(`/attributes?userId=${me.userId}`)
-        .then(r => { const m: Record<string, number> = {}; r.attributes.forEach(a => m[a.key] = a.score); setUserAttrs(m) })
-        .catch(() => {})
-    }).catch(() => {})
-    apiGet<Group[]>('/groups').then(gs => {
-      setGroups(gs)
-      if (gs.length > 0) setSelectedGroup(gs[0])
-    }).catch(() => {})
+    apiGet<Me>('/auth/me')
+      .then(currentMe => {
+        setMe(currentMe)
+        return apiGet<{ attributes: UserAttribute[] }>(`/attributes?userId=${currentMe.userId}`)
+      })
+      .then(r => {
+        const attrs: Record<string, number> = {}
+        r.attributes.forEach(a => { attrs[a.key] = a.score })
+        setUserAttrs(attrs)
+      })
+      .catch(() => undefined)
+
+    apiGet<Group[]>('/groups')
+      .then(gs => {
+        setGroups(gs)
+        if (gs.length) setSelectedGroup(gs[0])
+      })
+      .catch(() => undefined)
+
     fetch(`${API_BASE}/emoji-types`)
       .then(r => r.json())
-      .then((types: EmojiType[]) => { const m: Record<number, EmojiType> = {}; types.forEach(t => m[t.id] = t); setEmojiMap(m) })
-      .catch(() => {})
+      .then((types: EmojiType[]) => {
+        const map: Record<number, EmojiType> = {}
+        types.forEach(t => { map[t.id] = t })
+        setEmojiMap(map)
+      })
+      .catch(() => undefined)
   }, [])
 
   useEffect(() => {
     if (!selectedGroup) return
-    const loadRT = () => apiGet<Roundtable>(`/roundtable?groupId=${selectedGroup.id}`).then(setRoundtable).catch(() => {})
-    const loadMsgs = () => apiGet<Message[]>(`/groups/${selectedGroup.id}/messages`).then(setMessages).catch(() => {})
-    const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/groups/${selectedGroup.id}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
 
-    loadRT(); loadMsgs()
-    if (me) loadFeed(me.userId)
-
-    const wsUrl = API_BASE.replace(/^http/, 'ws')
-    const ws = new WebSocket(`${wsUrl}?groupId=${selectedGroup.id}`)
-    wsRef.current = ws
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data)
-      if (data.type === 'context_updated') { loadRT(); if (me) loadFeed(me.userId) }
-      if (data.type === 'new_message') { setMessages(prev => [...prev, data.message]); if (me) loadFeed(me.userId) }
+    const loadRoundtable = () => apiGet<Roundtable>(`/roundtable?groupId=${selectedGroup.id}`).then(setRoundtable).catch(() => undefined)
+    const loadMessages = () => apiGet<Message[]>(`/groups/${selectedGroup.id}/messages`).then(setMessages).catch(() => undefined)
+    const loadFeed = () => {
+      if (!me) return
+      apiGet<FeedMessage[]>(`/groups/${selectedGroup.id}/feed?userId=${me.userId}`).then(setFeedMessages).catch(() => undefined)
     }
-    return () => { ws.close() }
-  }, [selectedGroup])
+
+    loadRoundtable()
+    loadMessages()
+    loadFeed()
+
+    const ws = new WebSocket(`${API_BASE.replace(/^http/, 'ws')}?groupId=${selectedGroup.id}`)
+    wsRef.current = ws
+    ws.onmessage = event => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'context_updated') {
+        loadRoundtable()
+        loadFeed()
+      }
+      if (data.type === 'new_message') {
+        setMessages(prev => [...prev, data.message as Message])
+        loadFeed()
+      }
+    }
+
+    return () => ws.close()
+  }, [selectedGroup, me])
 
   useEffect(() => {
-    if (!aiSorted) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, aiSorted])
+    if (!forYou) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, forYou])
+
+  const members = useMemo(() => {
+    const hasAttrs = Object.keys(userAttrs).length > 0
+    if (!hasAttrs || !me) return roundtable.members
+    return roundtable.members
+      .filter(m => m.userId === me.userId || relevance(m, emojiMap, userAttrs) >= 0.05 || m.emojis.length === 0)
+      .sort((a, b) => relevance(b, emojiMap, userAttrs) - relevance(a, emojiMap, userAttrs))
+  }, [roundtable.members, me, emojiMap, userAttrs])
+
+  const comingEmojiId = Object.values(emojiMap).find(e => e.name === 'coming')?.id ?? null
+  const comingMembers = members.filter(m => getMemberStatus(m, comingEmojiId) === 'coming')
+  const notRespondedMembers = members.filter(m => getMemberStatus(m, comingEmojiId) === 'not-responded')
+  const notComingMembers = members.filter(m => getMemberStatus(m, comingEmojiId) === 'not-coming')
+
+  const allEvents = groups.length > 0
+    ? groups
+    : [{ id: 0, name: selectedGroup?.name ?? 'Park Hangout', location: selectedGroup?.location ?? 'No location', eventTime: null, description: null }]
+
+  const displayMessages = forYou
+    ? (feedMessages.length ? feedMessages : [...messages].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))).filter(m => m.sender.id !== me?.userId)
+    : [...messages].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt))
 
   const sendMessage = async () => {
     if (!text.trim() || !selectedGroup || !me) return
-    try { await apiPost('/messages', { groupId: selectedGroup.id, senderId: me.userId, content: text.trim() }); setText('') }
-    catch { /* silent */ }
+    await apiPost('/messages', { groupId: selectedGroup.id, senderId: me.userId, content: text.trim() })
+    setText('')
   }
 
-  const updateGroupField = async (field: string, value: string) => {
+  const updateField = async (field: keyof Group, value: string) => {
     if (!selectedGroup) return
-    try {
-      const updated = await apiPatch<Group>(`/groups/${selectedGroup.id}`, { [field]: value })
-      setSelectedGroup(updated)
-      setGroups(prev => prev.map(g => g.id === updated.id ? updated : g))
-    } catch { /* silent */ }
+    const updated = await apiPatch<Group>(`/groups/${selectedGroup.id}`, { [field]: value })
+    setSelectedGroup(updated)
+    setGroups(prev => prev.map(g => (g.id === updated.id ? updated : g)))
   }
 
-  const handleSuggestEvent = async () => {
+  const suggestEvent = async () => {
     if (!suggestName.trim() || !suggestMsg.trim() || !me) {
       setSuggestError('Please fill in both fields.')
       return
@@ -719,324 +461,199 @@ export function EventPage() {
       await apiPost('/messages', { groupId: group.id, senderId: me.userId, content: suggestMsg.trim() })
       setGroups(prev => [...prev, group])
       setSelectedGroup(group)
-      setCurrentView('current')
+      setView('current')
       setSuggestName('')
       setSuggestMsg('')
-    } catch (err: unknown) {
-      setSuggestError((err as Error)?.message ?? 'Failed to create event.')
+    } catch (error: unknown) {
+      setSuggestError((error as Error)?.message ?? 'Could not create event.')
     }
     setSuggestLoading(false)
   }
 
-  // ── Derived ──
-  const allMembers = roundtable.members
-  const comingEmojiId = Object.values(emojiMap).find(e => e.name === 'coming')?.id ?? null
-  const hasAttrs = Object.keys(userAttrs).length > 0
-
-  const members = hasAttrs
-    ? allMembers
-        .filter(m => m.userId === me?.userId || memberRelevance(m, emojiMap, userAttrs) >= RELEVANCE_THRESHOLD || m.emojis.length === 0)
-        .sort((a, b) => memberRelevance(b, emojiMap, userAttrs) - memberRelevance(a, emojiMap, userAttrs))
-    : allMembers
-
-  const comingMembers       = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'coming')
-  const notRespondedMembers = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'not-responded')
-  const notComingMembers    = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'not-coming')
-
-  const displayMessages = aiSorted
-    ? (feedMessages.length > 0 ? feedMessages : [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
-        .filter(m => m.sender.id !== me?.userId)
-    : [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-
-  const myRecentMessages = messages
-    .filter(m => m.sender.id === me?.userId)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 3)
-
-  const allEventItems = groups.length > 0
-    ? groups.map(g => ({
-        id: g.id,
-        name: g.name ?? `Event ${g.id}`,
-        subtitle: g.location || 'No location yet',
-      }))
-    : [{
-        id: 0,
-        name: selectedGroup?.name ?? 'Park Hangout',
-        subtitle: selectedGroup?.location || 'Demo event',
-      }]
-
-  // ─────────────────────────────────────────────────────────────────────────────
-
   return (
-    <div style={{
-      position: 'fixed', top: 52, bottom: 0,
-      left: '50%', transform: 'translateX(-50%)',
-      width: '100%', maxWidth: 1380,
-      overflow: 'hidden',
-      background: darkMode ? '#0f172a' : '#f3f4f6',
-      filter: darkMode ? 'brightness(0.7)' : 'none',
-      transition: 'background 0.2s, filter 0.2s',
-      zIndex: 0,
-      display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 12,
-      padding: 16, boxSizing: 'border-box',
-    }}>
-
-      {/* Top group header */}
-      <div className="flex items-center gap-3 px-1">
-        <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
-        <button
-          type="button"
-          title="Invite members"
-          aria-label="Invite members"
-          className="ml-1 h-9 w-9 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-        >
-          👤+
-        </button>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium">Dark Mode</span>
-          <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
-      {/* ── Left — Round Table ── */}
-      <div style={{
-        width: 660, flexShrink: 0, background: 'white',
-        borderRadius: 24, padding: '20px 20px 16px',
-        boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
-        display: 'flex', flexDirection: 'column',
-        boxSizing: 'border-box', overflow: 'hidden',
-      }}>
-
-        {/* Groups selector */}
-        <div className="mb-2 flex items-center gap-3">
-          <div className="relative">
-            <select
-              className="appearance-none pl-4 pr-8 py-1.5 text-sm text-white rounded-full cursor-pointer"
-              style={{ background: GRAD, border: 'none', outline: 'none' }}
-              value={selectedGroup?.id ?? ''}
-              onChange={e => { const g = groups.find(g => g.id === Number(e.target.value)); if (g) setSelectedGroup(g) }}
-            >
-              <option value="">Select Group</option>
-              {groups.map(g => (
-                <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name ?? `Group ${g.id}`}</option>
-              ))}
-            </select>
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white text-xs pointer-events-none">▾</span>
-          </div>
-        </div>
-
-        {/* Donut Ring */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600, marginTop: -10 }}>
-          <DonutRing
-            members={members}
-            emojiMap={emojiMap}
-            hoveredMember={hoveredEmoji ? null : hoveredMember}
-            hoveredEmoji={hoveredEmoji}
-            onHover={setHoveredMember}
-            onEmojiHover={setHoveredEmoji}
-          />
-        </div>
-
-        {/* Stats with tooltip */}
-        <EventStats
-          coming={comingMembers.length}
-          notResponded={notRespondedMembers.length}
-          notComing={notComingMembers.length}
-          comingMembers={comingMembers}
-          notRespondedMembers={notRespondedMembers}
-          notComingMembers={notComingMembers}
-          hoveredStat={hoveredStat}
-          onStatHover={setHoveredStat}
-        />
-
-        {/* Event Details */}
-        <div className="mt-1 px-1">
-          <EventDetails group={selectedGroup} onEdit={updateGroupField} />
-        </div>
-      </div>
-
-      {/* ── Right — Messaging ── */}
-      <div style={{
-        flex: 1, minWidth: 360, background: 'white',
-        borderRadius: 24, boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
-        overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    <div
+      style={{
+        position: 'fixed',
+        top: 52,
+        bottom: 0,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '100%',
+        maxWidth: 1540,
+        background: SHELL_BG,
+        padding: 16,
         boxSizing: 'border-box',
-      }}>
+      }}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, height: '100%' }}>
+        <div
+          style={{
+            background: PANEL_BG,
+            borderRadius: 24,
+            border: '1px solid #ebeff6',
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ position: 'relative' }}>
+              <select
+                value={selectedGroup?.id ?? ''}
+                onChange={e => {
+                  const group = groups.find(g => g.id === Number(e.target.value))
+                  if (group) setSelectedGroup(group)
+                }}
+                style={{
+                  height: 50,
+                  borderRadius: 26,
+                  padding: '0 46px 0 20px',
+                  background: GRADIENT,
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: 16,
+                  appearance: 'none',
+                  outline: 'none',
+                }}
+              >
+                <option value="">Groups</option>
+                {groups.map(g => (
+                  <option key={g.id} value={g.id}>{g.name ?? `Group ${g.id}`}</option>
+                ))}
+              </select>
+              <span style={{ position: 'absolute', right: 18, top: '50%', transform: 'translateY(-50%)', color: '#fff' }}>▾</span>
+            </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #f3f4f6' }}>
-          <button
-            onClick={() => setCurrentView('suggest')}
-            style={{
-              flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: GRAD, color: 'white',
-              border: 'none', cursor: 'pointer', borderRadius: '24px 0 0 0',
-              opacity: currentView === 'suggest' ? 1 : 0.85,
-              transition: 'opacity 0.15s',
-            }}
-          >
-            + New
-          </button>
-          <button
-            onClick={() => setCurrentView('current')}
-            style={{
-              flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'current' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'current' ? '#111827' : '#9ca3af',
-              border: 'none', cursor: 'pointer', borderRadius: '0 24px 0 0',
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >
-            Current Event
-          </button>
-          <button
-            onClick={() => setCurrentView('all')}
-            style={{
-              flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'all' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'all' ? '#111827' : '#9ca3af',
-              border: 'none', cursor: 'pointer',
-              borderLeft: '1px solid #f3f4f6',
-              borderRadius: '0 24px 0 0',
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >
-            All Events
-          </button>
+            <button style={{ height: 50, borderRadius: 26, border: 'none', padding: '0 22px', background: '#edf0ff', color: '#625ffb', fontSize: 16 }}>
+              Invite
+            </button>
+
+            <button style={{ marginLeft: 'auto', height: 50, borderRadius: 26, border: '1px solid #e8ecf5', padding: '0 22px', background: '#fff', color: '#51608b', fontSize: 16 }}>
+              Polls
+            </button>
+
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#eaf1ff', border: '1px solid #e5ebf8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5f6f97' }}>
+              {initials(me?.name ?? 'U')}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <SegmentDonut members={members} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginTop: 6 }}>
+            <div style={{ borderRadius: 12, border: '1px solid #9edbb3', background: '#ecf9f0', padding: '10px 12px', color: '#17a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{ fontSize: 30, lineHeight: '16px', fontWeight: 700 }}>{comingMembers.length}</span>
+              <span>Coming</span>
+            </div>
+            <div style={{ borderRadius: 12, border: '1px solid #e4e8f2', background: '#f8f9fd', padding: '10px 12px', color: '#7182ad', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{ fontSize: 30, lineHeight: '16px', fontWeight: 700 }}>{notRespondedMembers.length}</span>
+              <span>Not Responded</span>
+            </div>
+            <div style={{ borderRadius: 12, border: '1px solid #f0c6aa', background: '#fff6f1', padding: '10px 12px', color: '#ef6f2f', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{ fontSize: 30, lineHeight: '16px', fontWeight: 700 }}>{notComingMembers.length}</span>
+              <span>Not Coming</span>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, border: '1px solid #edf1f8', borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+            <DetailRow icon="📍" label="Location" value={selectedGroup?.location ?? null} placeholder="Add location..." onSave={v => updateField('location', v)} />
+            <DetailRow icon="🕐" label="Time" value={selectedGroup?.eventTime ?? null} placeholder="Add date & time..." onSave={v => updateField('eventTime', v)} isTime />
+            <div style={{ borderBottom: 'none' }}>
+              <DetailRow icon="📄" label="Description" value={selectedGroup?.description ?? null} placeholder="Add description..." onSave={v => updateField('description', v)} />
+            </div>
+          </div>
         </div>
 
-        {/* ── Suggest Event form ── */}
-        {currentView === 'suggest' && (
-          <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: '28px 32px', gap: 20 }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Suggest a New Event</h3>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#9ca3af' }}>Create a group and kick off the conversation.</p>
+        <div
+          style={{
+            background: PANEL_BG,
+            borderRadius: 24,
+            border: '1px solid #ebeff6',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
+          }}
+        >
+          <div style={{ padding: 12 }}>
+            <div style={{ background: '#f4f6fc', borderRadius: 16, padding: 4, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+              <button onClick={() => setView('suggest')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'suggest' ? GRADIENT : 'transparent', color: view === 'suggest' ? '#fff' : '#51608b' }}>Suggest Event</button>
+              <button onClick={() => setView('current')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'current' ? GRADIENT : 'transparent', color: view === 'current' ? '#fff' : '#51608b' }}>Current Event</button>
+              <button onClick={() => setView('all')} style={{ border: 'none', borderRadius: 12, padding: '10px 8px', background: view === 'all' ? GRADIENT : 'transparent', color: view === 'all' ? '#fff' : '#51608b' }}>All Events</button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Event name</label>
-              <input
-                value={suggestName}
-                onChange={e => setSuggestName(e.target.value)}
-                placeholder="e.g. Park Hangout Saturday"
-                style={{ borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '9px 14px', fontSize: 14, color: '#111827', outline: 'none', background: '#fafafa' }}
-                onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#93c5fd' }}
-                onBlur={e => { (e.target as HTMLInputElement).style.borderColor = '#e5e7eb' }}
-              />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Initial message</label>
-              <textarea
-                value={suggestMsg}
-                onChange={e => setSuggestMsg(e.target.value)}
-                placeholder="e.g. Hey everyone! Who's down for a park hangout this Saturday at 3pm?"
-                rows={4}
-                style={{ borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '9px 14px', fontSize: 14, color: '#111827', outline: 'none', background: '#fafafa', resize: 'none', fontFamily: 'inherit' }}
-                onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#93c5fd' }}
-                onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#e5e7eb' }}
-              />
-            </div>
-            {suggestError && <p style={{ margin: 0, fontSize: 13, color: '#ef4444' }}>{suggestError}</p>}
-            <button
-              onClick={handleSuggestEvent}
-              disabled={suggestLoading}
-              style={{
-                background: GRAD, color: 'white', border: 'none', borderRadius: 12,
-                padding: '11px 24px', fontSize: 14, fontWeight: 600,
-                cursor: suggestLoading ? 'not-allowed' : 'pointer',
-                opacity: suggestLoading ? 0.7 : 1, alignSelf: 'flex-start',
-                boxShadow: '0 2px 8px rgba(96,165,250,0.25)', transition: 'opacity 0.15s',
-              }}
-            >
-              {suggestLoading ? 'Creating…' : 'Create Event'}
-            </button>
           </div>
-        )}
 
-        {/* ── Current Events ── */}
-        {currentView === 'current' && (
-          <>
-            <div className="px-5 pt-4 pb-3 flex-shrink-0">
-              <div>
-                <h2 className="font-bold text-[22px] text-slate-800 leading-tight">
-                  {selectedGroup?.name ?? 'Park Hangout'}
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Group Chat</p>
-              </div>
-              <div className="flex items-center gap-2 mt-2.5">
-                <span className="text-xs text-slate-500">For You Filter</span>
-                <Toggle on={aiSorted} onToggle={() => setAiSorted(v => !v)} />
-              </div>
+          {view === 'suggest' && (
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <h3 style={{ margin: 0, color: '#2f3f72' }}>Suggest a New Event</h3>
+              <input value={suggestName} onChange={e => setSuggestName(e.target.value)} placeholder="Event name" style={{ height: 44, borderRadius: 10, border: '1px solid #dde4f3', padding: '0 12px' }} />
+              <textarea value={suggestMsg} onChange={e => setSuggestMsg(e.target.value)} placeholder="Initial message" rows={4} style={{ borderRadius: 10, border: '1px solid #dde4f3', padding: 12, resize: 'none' }} />
+              {suggestError && <span style={{ color: '#dc2626' }}>{suggestError}</span>}
+              <button onClick={suggestEvent} disabled={suggestLoading} style={{ height: 44, border: 'none', borderRadius: 10, background: GRADIENT, color: '#fff' }}>{suggestLoading ? 'Creating…' : 'Create Event'}</button>
             </div>
+          )}
 
-            <div style={{ height: 1, background: '#f3f4f6', flexShrink: 0 }} />
-
-            <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-3 min-h-0">
-              {displayMessages.length === 0
-                ? <p className="text-xs text-slate-300 text-center mt-8">No messages yet</p>
-                : displayMessages.map(msg => (
-                    <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} />
-                  ))
-              }
-              <div ref={messagesEndRef} />
-            </div>
-
-            {aiSorted && myRecentMessages.length > 0 && (
-              <div className="flex-shrink-0 px-5 py-2.5" style={{ borderTop: '1px solid #f3f4f6', background: '#fafafa' }}>
-                <p className="text-xs font-semibold text-slate-400 mb-2">Your Recent Messages</p>
-                <div className="flex flex-col gap-1.5">
-                  {myRecentMessages.map(msg => <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} compact />)}
-                </div>
-              </div>
-            )}
-
-            <div className="flex-shrink-0 px-4 py-3 flex gap-2.5 items-center" style={{ borderTop: '1px solid #f3f4f6' }}>
-              <input
-                className="flex-1 rounded-full px-4 py-2 text-sm outline-none text-slate-700"
-                style={{ background: '#f3f4f6', border: 'none' }}
-                placeholder="Type a message..."
-                value={text}
-                onChange={e => setText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              />
-              <button
-                onClick={sendMessage}
-                className="flex-shrink-0 flex items-center justify-center rounded-full text-white font-bold text-base"
-                style={{ width: 38, height: 38, background: GRAD, border: 'none', cursor: 'pointer' }}
-              >
-                ↑
-              </button>
-            </div>
-          </>
-        )}
-
-        {currentView === 'all' && (
-          <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-            <h3 className="m-0 text-base font-semibold text-slate-800">All Events</h3>
-            <p className="mt-1 mb-4 text-xs text-slate-400">Select an event in this group.</p>
-            <div className="flex flex-col gap-2">
-              {allEventItems.map(event => (
+          {view === 'all' && (
+            <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+              <h3 style={{ margin: 0, color: '#2f3f72' }}>All Events</h3>
+              {allEvents.map(g => (
                 <button
-                  key={event.id}
+                  key={g.id}
                   onClick={() => {
-                    const group = groups.find(g => g.id === event.id)
-                    if (group) setSelectedGroup(group)
-                    setCurrentView('current')
+                    const found = groups.find(x => x.id === g.id)
+                    if (found) setSelectedGroup(found)
+                    setView('current')
                   }}
-                  className="w-full text-left rounded-xl border px-3 py-2.5 transition-colors"
                   style={{
-                    borderColor: selectedGroup?.id === event.id ? '#93c5fd' : '#e5e7eb',
-                    background: selectedGroup?.id === event.id ? '#eff6ff' : 'white',
+                    border: '1px solid #e2e8f4',
+                    background: selectedGroup?.id === g.id ? '#eff4ff' : '#fff',
+                    borderRadius: 12,
+                    textAlign: 'left',
+                    padding: '10px 12px',
                   }}
                 >
-                  <div className="text-sm font-medium text-slate-800">{event.name}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{event.subtitle}</div>
+                  <div style={{ color: '#2f3f72', fontWeight: 600 }}>{g.name ?? `Event ${g.id}`}</div>
+                  <div style={{ color: '#9aa8cb', fontSize: 13 }}>{g.location ?? 'No location yet'}</div>
                 </button>
               ))}
             </div>
-          </div>
-        )}
-      </div>
+          )}
+
+          {view === 'current' && (
+            <>
+              <div style={{ padding: '4px 20px 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <h2 style={{ margin: 0, color: '#2f3f72', fontSize: 44 }}>{selectedGroup?.name ?? 'Park Hangout'}</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#4f5f8b', fontSize: 16 }}>
+                    <span>For-You</span>
+                    <ForYouToggle on={forYou} onToggle={() => setForYou(v => !v)} />
+                  </div>
+                </div>
+                <div style={{ color: '#9babcf', marginTop: 4, fontSize: 16 }}>Group Chat</div>
+              </div>
+
+              <div style={{ height: 1, background: '#edf1f8' }} />
+              <div style={{ padding: '12px 20px', color: '#8ea0cc', fontSize: 16 }}>✦ AI-sorted by relevancy</div>
+
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {displayMessages.map(msg => <MessageRow key={msg.id} msg={msg} />)}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div style={{ padding: '12px 14px 16px', borderTop: '1px solid #edf1f8', display: 'flex', gap: 10, alignItems: 'center' }}>
+                <input
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') sendMessage() }}
+                  placeholder="Type a message..."
+                  style={{ flex: 1, height: 52, borderRadius: 26, border: '1px solid #e3e8f4', padding: '0 16px', fontSize: 16, outline: 'none' }}
+                />
+                <button onClick={sendMessage} style={{ width: 52, height: 52, borderRadius: '50%', border: 'none', background: GRADIENT, color: '#fff', fontSize: 20 }}>➤</button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )
