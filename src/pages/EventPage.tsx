@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import { apiGet, apiPatch, apiPost } from '../api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL as string
@@ -6,8 +6,9 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Me { userId: number; name: string }
-interface Group {
-  id: number; name: string | null
+interface Group { id: number; name: string }
+interface Event {
+  id: number; groupId: number; name: string
   location: string | null; eventTime: string | null; description: string | null
 }
 interface EmojiType { id: number; name: string; emoji: string }
@@ -23,7 +24,7 @@ interface PollOption {
 }
 interface PollState {
   id: number
-  groupId: number | null
+  eventId: number | null
   userId: number | null
   question: string | null
   createdAt: string | null
@@ -48,42 +49,33 @@ interface UserAttribute { key: string; score: number }
 
 type Status = 'coming' | 'not-responded' | 'not-coming'
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_EMOJI_MAP: Record<number, EmojiType> = {
-  1: { id: 1, name: 'coming', emoji: '✅' },
-  2: { id: 2, name: 'needs_ride', emoji: '🚗' },
-  3: { id: 3, name: 'bringing_food', emoji: '🍕' },
-}
-
-const MOCK_ROUNDTABLE: Roundtable = {
-  members: [
-    { userId: 1, name: 'Andy', emojis: [
-      { emojiId: 1, score: 0.9, topQuotes: ["I'm in! What time should we meet?", "Count me in for sure", "See you all there!", "Can't wait"] },
-      { emojiId: 2, score: 0.7, topQuotes: ["I can give people rides if needed", "I have space for 3", "Happy to drive"] },
-    ]},
-    { userId: 2, name: 'Sidney', emojis: [] },
-    { userId: 3, name: 'Bartholomew', emojis: [] },
-    { userId: 4, name: 'Colin', emojis: [
-      { emojiId: 1, score: 0.85, topQuotes: ["Perfect! See you all there", "Definitely coming", "I'll be there at 6", "Excited!"] },
-      { emojiId: 3, score: 0.8, topQuotes: ["I'll bring snacks!", "Bringing chips and dip", "Happy to bring food"] },
-    ]},
-    { userId: 5, name: 'Christopher', emojis: [] },
-    { userId: 6, name: 'Manasa', emojis: [] },
-  ]
-}
-
-const MOCK_MESSAGES: Message[] = [
-  { id: 1, content: "Perfect! See you all there", createdAt: new Date(Date.now() - 23 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
-  { id: 2, content: "I might not make it, got a work thing", createdAt: new Date(Date.now() - 20 * 60000).toISOString(), sender: { id: 5, name: 'Rohan' } },
-  { id: 3, content: "I'm in! What time should we meet?", createdAt: new Date(Date.now() - 26 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 4, content: "I can give people rides if needed", createdAt: new Date(Date.now() - 18 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 5, content: "I'll bring some games!", createdAt: new Date(Date.now() - 15 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
-]
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const GRAD = 'linear-gradient(135deg, #86efac 0%, #60a5fa 50%, #c084fc 100%)'
+
+// ─── Theme helper ─────────────────────────────────────────────────────────────
+function th(dark: boolean) {
+  return {
+    pageBg:      dark ? '#0f172a' : '#f3f4f6',
+    panelBg:     dark ? '#1e293b' : '#ffffff',
+    panelBg2:    dark ? '#162032' : '#fafafa',
+    muted:       dark ? '#334155' : '#f3f4f6',
+    border:      dark ? '#334155' : '#e5e7eb',
+    text:        dark ? '#f1f5f9' : '#111827',
+    textSub:     dark ? '#94a3b8' : '#6b7280',
+    textFaint:   dark ? '#64748b' : '#9ca3af',
+    msgOtherBg:  dark ? '#334155' : '#f0f0f0',
+    msgOtherTxt: dark ? '#f1f5f9' : '#111827',
+    inputBg:     dark ? '#0f172a' : '#f3f4f6',
+    centerFill1: dark ? '#1e2d45' : '#f8faff',
+    centerFill2: dark ? '#162032' : '#eef2ff',
+    nameBadge:   dark ? 'rgba(15,23,42,0.75)' : 'rgba(200,210,225,0.65)',
+    nameBadgeTxt:dark ? '#94a3b8' : '#4b5563',
+    tooltipBg:   dark ? '#0f172a' : '#ffffff',
+    tabActiveBg: dark ? '#334155' : '#ffffff',
+    tabInactBg:  dark ? 'transparent' : 'transparent',
+  }
+}
 
 const MEMBER_COLORS = [
   '#3b82f6', '#10b981', '#f97316', '#8b5cf6',
@@ -119,17 +111,18 @@ interface DonutRingProps {
   hoveredEmoji: HoveredEmoji | null
   onHover: (id: number | null) => void
   onEmojiHover: (val: HoveredEmoji | null) => void
+  darkMode: boolean
 }
 
-function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, onEmojiHover }: DonutRingProps) {
+function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, onEmojiHover, darkMode }: DonutRingProps) {
+  const c = th(darkMode)
   const n = members.length
   const GAP = n > 1 ? 1.0 : 0
   const degPer = 360 / Math.max(n, 1)
-  const EMOJI_R = (INNER + OUTER) / 2  // mid of the ring band
+  const EMOJI_R = (INNER + OUTER) / 2
 
-  // Center content: emoji hover shows quotes, member hover shows name+quotes
   let centerContent: React.ReactNode = (
-    <div className="text-xs text-slate-300 text-center" style={{ fontSize: 11 }}>
+    <div style={{ fontSize: 11, color: c.textFaint, textAlign: 'center' }}>
       {members.length === 0 ? 'No members yet' : 'hover a member'}
     </div>
   )
@@ -139,12 +132,12 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
     if (hov) {
       centerContent = (
         <>
-          <div className="font-bold text-sm mb-1.5" style={{ color: memberColor(hov.userId) }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: memberColor(hov.userId), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', marginBottom: 6 }}>
             {hov.name}
           </div>
           {hov.emojis.flatMap(e =>
             e.topQuotes.slice(0, 1).map((q, qi) => (
-              <div key={`${e.emojiId}-${qi}`} className="text-xs text-slate-500 leading-snug mb-1" style={{ fontSize: 10.5 }}>
+              <div key={`${e.emojiId}-${qi}`} style={{ fontSize: 10.5, color: c.textSub, lineHeight: 1.4, marginBottom: 4 }}>
                 "{q}"
               </div>
             ))
@@ -161,11 +154,11 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
     if (m && e && et) {
       centerContent = (
         <>
-          <div className="font-bold text-sm mb-1" style={{ color: memberColor(m.userId) }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: memberColor(m.userId), marginBottom: 4 }}>
             {et.emoji} {m.name}
           </div>
           {e.topQuotes.slice(0, 4).map((q, qi) => (
-            <div key={qi} className="text-xs text-slate-500 leading-snug mb-1" style={{ fontSize: 10 }}>
+            <div key={qi} style={{ fontSize: 10, color: c.textSub, lineHeight: 1.4, marginBottom: 3 }}>
               "{q}"
             </div>
           ))}
@@ -175,29 +168,26 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
   }
 
   return (
-    <div className="relative flex-shrink-0" style={{ width: SVG_SIZE, height: SVG_SIZE }}>
-      <svg width={SVG_SIZE} height={SVG_SIZE}>
+    <div className="relative" style={{ width: '100%', maxWidth: SVG_SIZE, maxHeight: '100%', aspectRatio: '1 / 1' }}>
+      <svg viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} width="100%" height="100%" style={{ display: 'block' }}>
         <defs>
-          {/* The same gradient used on the Groups selector, applied to the whole ring */}
           <linearGradient id="ringGrad" x1={CX - OUTER} y1={CY - OUTER} x2={CX + OUTER} y2={CY + OUTER} gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#86efac" />
             <stop offset="50%" stopColor="#60a5fa" />
             <stop offset="100%" stopColor="#c084fc" />
           </linearGradient>
           <radialGradient id="centerGrad" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#f8faff" />
-            <stop offset="70%" stopColor="#eef2ff" />
-            <stop offset="100%" stopColor="#f3f0ff" />
+            <stop offset="0%" stopColor={c.centerFill1} />
+            <stop offset="70%" stopColor={c.centerFill2} />
+            <stop offset="100%" stopColor={c.centerFill2} />
           </radialGradient>
           <filter id="sliceShadow" x="-10%" y="-10%" width="120%" height="120%">
             <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.15" />
           </filter>
         </defs>
 
-        {/* Center fill */}
         <circle cx={CX} cy={CY} r={INNER - 1} fill="url(#centerGrad)" />
 
-        {/* Slices — all use the unified ring gradient */}
         {members.map((m, i) => {
           const start = i * degPer + GAP
           const end = (i + 1) * degPer - GAP
@@ -226,7 +216,6 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           )
         })}
 
-        {/* Emojis floating inside the ring band */}
         {members.map((m, i) => {
           const start = i * degPer + GAP
           const end = (i + 1) * degPer - GAP
@@ -271,20 +260,20 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           )
         })}
 
-        {/* Avatars — outside the ring */}
         {members.map((m, i) => {
           const midDeg = (i + 0.5) * degPer
           const pos = polar(AVATAR_R, midDeg)
           const color = memberColor(m.userId)
           const isHov = m.userId === hoveredMember
-          // Name badge: positioned radially outward from the avatar center so it
-          // always points away from the ring — never back toward or into the chart.
-          // 7px per char is generous enough for typical fonts at fontSize=9
-          const nameW = Math.max(m.name.length * 7 + 18, 36)
+          const MAX_LABEL = 10
+          const displayName = m.name.length > MAX_LABEL
+            ? m.name.slice(0, MAX_LABEL - 1) + '…'
+            : m.name
+          const nameW = Math.max(displayName.length * 7 + 18, 36)
           const nameH = 16
-          // Always place the badge directly below the avatar and keep it centered.
-          const nameY = pos.y + 22   // top of badge (avatar bottom + 2px gap)
-          const nameX = pos.x - nameW / 2
+          const rawNameX = pos.x - nameW / 2
+          const nameX = Math.max(4, Math.min(SVG_SIZE - nameW - 4, rawNameX))
+          const nameY = pos.y + 22
 
           return (
             <g
@@ -311,40 +300,35 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
               >
                 {m.name[0].toUpperCase()}
               </text>
-              {/* Name badge — centered directly under avatar */}
               <rect
-                x={nameX}
-                y={nameY}
-                width={nameW}
-                height={nameH}
+                x={nameX} y={nameY}
+                width={nameW} height={nameH}
                 rx={8}
-                fill="rgba(200,210,225,0.65)"
+                fill={c.nameBadge}
                 style={{ pointerEvents: 'none' }}
               />
               <text
-                x={nameX + nameW / 2}
-                y={nameY + nameH / 2}
+                x={nameX + nameW / 2} y={nameY + nameH / 2}
                 textAnchor="middle" dominantBaseline="central"
-                fill="#4b5563" fontSize={9} fontWeight={600}
+                fill={c.nameBadgeTxt} fontSize={9} fontWeight={600}
                 style={{ pointerEvents: 'none', userSelect: 'none' }}
               >
-                {m.name}
+                {displayName}
               </text>
             </g>
           )
         })}
       </svg>
 
-      {/* Center info overlay */}
       <div
         className="absolute pointer-events-none flex flex-col items-center justify-center text-center"
         style={{
           top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: (INNER - 6) * 2,
-          height: (INNER - 6) * 2,
+          width: `${((INNER - 6) * 2 / SVG_SIZE) * 100}%`,
+          height: `${((INNER - 6) * 2 / SVG_SIZE) * 100}%`,
           borderRadius: '50%',
-          padding: 14,
+          padding: '2.5%',
           overflow: 'hidden',
         }}
       >
@@ -356,7 +340,6 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
 
 // ─── Event Stats ──────────────────────────────────────────────────────────────
 
-// Small avatar circle that shows the member's name in a tooltip on hover
 function AvatarBadge({ member, dotColor }: { member: RtMember; dotColor: string }) {
   const [hov, setHov] = useState(false)
   const color = memberColor(member.userId)
@@ -386,7 +369,7 @@ function AvatarBadge({ member, dotColor }: { member: RtMember; dotColor: string 
           padding: '3px 8px', borderRadius: 6,
           whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 30,
         }}>
-          {member.name}
+          {member.name.length > 16 ? member.name.slice(0, 15) + '…' : member.name}
         </div>
       )}
     </div>
@@ -411,13 +394,15 @@ interface EventStatsProps {
   notComingMembers: RtMember[]
   hoveredStat: Status | null
   onStatHover: (s: Status | null) => void
+  darkMode: boolean
 }
 
 function EventStats({
   coming, notResponded, notComing,
   comingMembers, notRespondedMembers, notComingMembers,
-  hoveredStat, onStatHover,
+  hoveredStat, onStatHover, darkMode,
 }: EventStatsProps) {
+  const c = th(darkMode)
   const items: StatItem[] = [
     { status: 'coming',        count: coming,       label: 'Coming',        dotColor: '#4ade80', members: comingMembers,       tooltipAlign: 'left' },
     { status: 'not-responded', count: notResponded, label: 'Not Responded', dotColor: '#fb923c', members: notRespondedMembers, tooltipAlign: 'center' },
@@ -428,7 +413,6 @@ function EventStats({
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* Tooltip — avatar circles with name shown on hover of each circle */}
       {hovItem && hovItem.members.length > 0 && (
         <div style={{
           position: 'absolute',
@@ -436,11 +420,11 @@ function EventStats({
           ...(hovItem.tooltipAlign === 'left'   ? { left: 0 } :
               hovItem.tooltipAlign === 'right'  ? { right: 0 } :
               { left: '50%', transform: 'translateX(-50%)' }),
-          background: 'white',
-          border: '1px solid #e5e7eb',
+          background: c.tooltipBg,
+          border: `1px solid ${c.border}`,
           borderRadius: 14,
           padding: '10px 12px',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+          boxShadow: darkMode ? '0 4px 16px rgba(0,0,0,0.4)' : '0 4px 16px rgba(0,0,0,0.10)',
           zIndex: 20,
           display: 'flex',
           alignItems: 'center',
@@ -468,8 +452,8 @@ function EventStats({
               onMouseLeave={() => onStatHover(null)}
             >
               <div className="w-2 h-2 rounded-full" style={{ background: item.dotColor }} />
-              <span className="text-sm font-semibold text-slate-700">{item.count}</span>
-              <span className="text-sm text-slate-400">{item.label}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: c.text }}>{item.count}</span>
+              <span style={{ fontSize: 14, color: c.textSub }}>{item.label}</span>
             </div>
           </>
         ))}
@@ -480,56 +464,58 @@ function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: string, value: string) => void }) {
+function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
+  const c = th(darkMode)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
   function startEdit(field: string, current: string) { setEditing(field); setDraft(current) }
   function save(field: string) { onEdit(field, draft); setEditing(null) }
 
-  const formatted = group?.eventTime
-    ? new Date(group.eventTime).toLocaleDateString('en-US', {
+  const formatted = event?.eventTime
+    ? new Date(event.eventTime).toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
         hour: 'numeric', minute: '2-digit',
       })
     : null
 
+  const fieldText: React.CSSProperties = { color: c.text, fontSize: 13, cursor: 'pointer', transition: 'color 0.15s' }
+  const placeholder: React.CSSProperties = { color: c.textFaint, fontStyle: 'italic', fontSize: 12 }
+  const editInput: React.CSSProperties = { flex: 1, borderBottom: `1.5px solid #60a5fa`, outline: 'none', fontSize: 13, background: 'transparent', color: c.text }
+
   return (
-    <div className="flex flex-col gap-2.5 text-sm">
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">📍</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📍</span>
         {editing === 'location' ? (
-          <input autoFocus className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
+          <input autoFocus style={editInput}
             value={draft} onChange={e => setDraft(e.target.value)}
             onBlur={() => save('location')} onKeyDown={e => e.key === 'Enter' && save('location')} />
         ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('location', group?.location ?? '')}>
-            {group?.location ?? <span className="text-slate-300 italic text-xs">Add location…</span>}
+          <span style={fieldText} onClick={() => startEdit('location', event?.location ?? '')}>
+            {event?.location ?? <span style={placeholder}>Add location…</span>}
           </span>
         )}
       </div>
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">🕐</span>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>🕐</span>
         {editing === 'eventTime' ? (
-          <input autoFocus type="datetime-local" className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
+          <input autoFocus type="datetime-local" style={{ ...editInput, colorScheme: darkMode ? 'dark' : 'light' }}
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
         ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors"
-            onClick={() => startEdit('eventTime', group?.eventTime ? group.eventTime.slice(0, 16) : '')}>
-            {formatted ?? <span className="text-slate-300 italic text-xs">Add date & time…</span>}
+          <span style={fieldText} onClick={() => startEdit('eventTime', event?.eventTime ? event.eventTime.slice(0, 16) : '')}>
+            {formatted ?? <span style={placeholder}>Add date & time…</span>}
           </span>
         )}
       </div>
-      <div className="flex gap-3 items-start">
-        <span className="flex-shrink-0 text-slate-400 mt-0.5">📄</span>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📄</span>
         {editing === 'description' ? (
-          <textarea autoFocus rows={2} className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent resize-none"
+          <textarea autoFocus rows={2} style={{ ...editInput, resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
         ) : (
-          <span className="text-slate-600 cursor-pointer hover:text-blue-500 transition-colors leading-snug"
-            onClick={() => startEdit('description', group?.description ?? '')}>
-            {group?.description ?? <span className="text-slate-300 italic text-xs">Add description…</span>}
+          <span style={{ ...fieldText, lineHeight: 1.5 }} onClick={() => startEdit('description', event?.description ?? '')}>
+            {event?.description ?? <span style={placeholder}>Add description…</span>}
           </span>
         )}
       </div>
@@ -565,6 +551,7 @@ interface MessageItemProps {
   compact?: boolean
   votingPollId?: number | null
   onVotePoll?: (pollId: number, selectedOptionIds: number[]) => Promise<void>
+  darkMode: boolean
 }
 
 function PollCard({
@@ -574,6 +561,7 @@ function PollCard({
   isAutoPoll,
   isMine,
   isSaving,
+  darkMode,
   onVote,
 }: {
   poll: PollState
@@ -582,12 +570,14 @@ function PollCard({
   isAutoPoll: boolean
   isMine: boolean
   isSaving: boolean
+  darkMode: boolean
   onVote: (selectedOptionIds: number[]) => Promise<void>
 }) {
+  const c = th(darkMode)
   const [draftSelection, setDraftSelection] = useState<number[]>(poll.viewerVoteOptionIds)
 
   function toggleOption(optionId: number) {
-    if (disabled || isSaving) return
+    if (disabled || isSaving || !poll.isActive) return
 
     if (!poll.allowsMultiple) {
       void onVote([optionId])
@@ -609,11 +599,13 @@ function PollCard({
     <div
       style={{
         width: compact ? '100%' : 'min(100%, 520px)',
-        background: isMine ? 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)' : 'white',
-        border: `1px solid ${isMine ? '#bfdbfe' : '#e5e7eb'}`,
+        background: isMine
+          ? (darkMode ? 'linear-gradient(180deg, #13233d 0%, #162b47 100%)' : 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)')
+          : c.panelBg,
+        border: `1px solid ${isMine ? '#60a5fa' : c.border}`,
         borderRadius: 18,
         padding: compact ? '10px 12px' : '14px 16px',
-        boxShadow: '0 6px 18px rgba(15,23,42,0.07)',
+        boxShadow: darkMode ? '0 6px 18px rgba(2,6,23,0.35)' : '0 6px 18px rgba(15,23,42,0.07)',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
@@ -621,28 +613,28 @@ function PollCard({
           style={{
             fontSize: 11,
             fontWeight: 700,
-            color: isAutoPoll ? '#7c3aed' : '#2563eb',
-            background: isAutoPoll ? '#f3e8ff' : '#eff6ff',
+            color: isAutoPoll ? '#a78bfa' : '#2563eb',
+            background: isAutoPoll ? (darkMode ? 'rgba(124,58,237,0.18)' : '#f3e8ff') : (darkMode ? 'rgba(37,99,235,0.16)' : '#eff6ff'),
             borderRadius: 999,
             padding: '3px 8px',
           }}
         >
           {isAutoPoll ? 'Auto Poll' : 'Poll'}
         </span>
-        <span style={{ fontSize: 11, color: '#64748b' }}>
+        <span style={{ fontSize: 11, color: c.textSub }}>
           {poll.allowsMultiple ? 'Pick one or more' : 'Pick one'}
         </span>
-        <span style={{ fontSize: 11, color: '#64748b' }}>
+        <span style={{ fontSize: 11, color: c.textSub }}>
           {poll.totalVoters} {poll.totalVoters === 1 ? 'voter' : 'voters'}
         </span>
         {!poll.isActive && (
-          <span style={{ fontSize: 11, color: '#b45309', background: '#fffbeb', borderRadius: 999, padding: '3px 8px' }}>
+          <span style={{ fontSize: 11, color: '#b45309', background: darkMode ? 'rgba(245,158,11,0.18)' : '#fffbeb', borderRadius: 999, padding: '3px 8px' }}>
             {poll.isExpired ? 'Expired' : 'Closed'}
           </span>
         )}
       </div>
 
-      <div style={{ fontSize: compact ? 13 : 15, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>
+      <div style={{ fontSize: compact ? 13 : 15, fontWeight: 700, color: c.text, marginBottom: 10 }}>
         {poll.question}
       </div>
 
@@ -656,14 +648,14 @@ function PollCard({
             <button
               key={option.id}
               type="button"
-              disabled={disabled || isSaving}
+              disabled={disabled || isSaving || !poll.isActive}
               onClick={() => toggleOption(option.id)}
               style={{
-                border: selected ? '1.5px solid #60a5fa' : '1px solid #dbe3ee',
-                background: selected ? '#eff6ff' : '#f8fafc',
+                border: selected ? '1.5px solid #60a5fa' : `1px solid ${c.border}`,
+                background: selected ? (darkMode ? 'rgba(37,99,235,0.18)' : '#eff6ff') : c.panelBg2,
                 borderRadius: 14,
                 padding: '10px 12px',
-                cursor: disabled || isSaving ? 'not-allowed' : 'pointer',
+                cursor: disabled || isSaving || !poll.isActive ? 'not-allowed' : 'pointer',
                 textAlign: 'left',
                 position: 'relative',
                 overflow: 'hidden',
@@ -679,14 +671,14 @@ function PollCard({
               />
               <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{option.optionText}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: c.text }}>{option.optionText}</div>
                   {option.selectedByViewer && (
                     <div style={{ fontSize: 11, color: '#2563eb', marginTop: 2 }}>Your vote</div>
                   )}
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{option.percentage}%</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>{option.voteCount} votes</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: c.text }}>{option.percentage}%</div>
+                  <div style={{ fontSize: 11, color: c.textSub }}>{option.voteCount} votes</div>
                 </div>
               </div>
             </button>
@@ -719,10 +711,10 @@ function PollCard({
             onClick={() => setDraftSelection(poll.viewerVoteOptionIds)}
             disabled={disabled || isSaving || !hasDraftChanges}
             style={{
-              border: '1px solid #cbd5e1',
+              border: `1px solid ${c.border}`,
               borderRadius: 999,
-              background: 'white',
-              color: '#475569',
+              background: c.panelBg,
+              color: c.textSub,
               fontSize: 12,
               fontWeight: 600,
               padding: '8px 14px',
@@ -737,7 +729,8 @@ function PollCard({
   )
 }
 
-function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePoll }: MessageItemProps) {
+function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePoll, darkMode }: MessageItemProps) {
+  const c = th(darkMode)
   const isMe = msg.sender.id === meId
   const color = memberColor(msg.sender.id)
   const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -770,6 +763,7 @@ function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePo
             isAutoPoll={Boolean(msg.isAutoPoll)}
             isMine={isMe}
             isSaving={votingPollId === poll.id}
+            darkMode={darkMode}
             onVote={(selectedOptionIds) => onVotePoll ? onVotePoll(poll.id, selectedOptionIds) : Promise.resolve()}
           />
         </div>
@@ -791,7 +785,7 @@ function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePo
         }}>
           {msg.content}
         </div>
-        <span style={{ fontSize: 10, color: '#9ca3af', marginRight: 4 }}>{time}</span>
+        <span style={{ fontSize: 10, color: c.textFaint, marginRight: 4 }}>{time}</span>
       </div>
     )
   }
@@ -814,7 +808,7 @@ function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePo
           </div>
         )}
         <div style={{
-          background: '#f0f0f0', color: '#111827',
+          background: c.msgOtherBg, color: c.msgOtherTxt,
           borderRadius: compact ? '14px 14px 14px 3px' : '4px 18px 18px 18px',
           padding: compact ? '5px 11px' : '9px 15px',
           maxWidth: '78%',
@@ -824,18 +818,29 @@ function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePo
           {msg.content}
         </div>
       </div>
-      <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: compact ? 0 : 40 }}>{time}</span>
+      <span style={{ fontSize: 10, color: c.textFaint, marginLeft: compact ? 0 : 40 }}>{time}</span>
     </div>
   )
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getMemberStatus(member: RtMember, comingEmojiId: number | null): Status {
-  if (!comingEmojiId) return 'not-responded'
-  const e = member.emojis.find(e => e.emojiId === comingEmojiId)
-  if (!e) return 'not-responded'
-  return e.score >= 0.4 ? 'coming' : 'not-coming'
+function getMemberStatus(
+  member: RtMember,
+  comingEmojiId: number | null,
+  notComingEmojiId: number | null,
+  maybeEmojiId: number | null,
+): Status {
+  const comingScore    = comingEmojiId    ? (member.emojis.find(e => e.emojiId === comingEmojiId)?.score    ?? 0) : 0
+  const notComingScore = notComingEmojiId ? (member.emojis.find(e => e.emojiId === notComingEmojiId)?.score ?? 0) : 0
+  const maybeScore     = maybeEmojiId     ? (member.emojis.find(e => e.emojiId === maybeEmojiId)?.score     ?? 0) : 0
+
+  const hasSignal = comingScore >= 0.4 || notComingScore >= 0.4 || maybeScore >= 0.4
+  if (!hasSignal) return 'not-responded'
+
+  if (notComingScore >= comingScore && notComingScore >= maybeScore) return 'not-coming'
+  if (comingScore >= notComingScore && comingScore >= maybeScore)    return 'coming'
+  return 'not-responded'
 }
 
 function memberRelevance(m: RtMember, emojiMap: Record<number, EmojiType>, attrs: Record<string, number>): number {
@@ -853,15 +858,82 @@ function memberRelevance(m: RtMember, emojiMap: Record<number, EmojiType>, attrs
 
 const RELEVANCE_THRESHOLD = 0.05
 
+// ─── Invite Panel ─────────────────────────────────────────────────────────────
+
+function InvitePanel({ groupId, darkMode, onClose }: { groupId: number; darkMode: boolean; onClose: () => void }) {
+  const c = th(darkMode)
+  const [phone, setPhone] = useState('')
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setStatus(null)
+    try {
+      const res = await apiPost<{ user: { name: string } }>(`/groups/${groupId}/invite`, { phone })
+      setStatus({ ok: true, msg: `${res.user.name} added to group!` })
+      setPhone('')
+    } catch (err) {
+      setStatus({ ok: false, msg: err instanceof Error ? err.message : 'Failed to add user' })
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{
+      position: 'absolute', top: 'calc(100% + 8px)', left: 0,
+      background: c.panelBg, border: `1px solid ${c.border}`,
+      borderRadius: 14, padding: '16px',
+      boxShadow: darkMode ? '0 8px 28px rgba(0,0,0,0.4)' : '0 8px 28px rgba(0,0,0,0.12)',
+      width: 240, zIndex: 50,
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 10 }}>Add member by phone</div>
+      <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <input
+          type="tel"
+          placeholder="Phone number"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          required
+          style={{ borderRadius: 8, border: `1.5px solid ${c.border}`, padding: '7px 10px', fontSize: 13, color: c.text, background: c.inputBg, outline: 'none' }}
+        />
+        {status && (
+          <p style={{ margin: 0, fontSize: 12, color: status.ok ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+            {status.msg}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="submit" disabled={loading} style={{
+            flex: 1, background: GRAD, color: 'white', border: 'none', borderRadius: 8,
+            padding: '7px 0', fontSize: 13, fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
+          }}>
+            {loading ? '…' : 'Add'}
+          </button>
+          <button type="button" onClick={onClose} style={{
+            background: 'transparent', border: `1px solid ${c.border}`,
+            borderRadius: 8, padding: '7px 12px', fontSize: 13, color: c.textSub, cursor: 'pointer',
+          }}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function EventPage() {
   const [me, setMe] = useState<Me | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
-  const [emojiMap, setEmojiMap] = useState<Record<number, EmojiType>>(MOCK_EMOJI_MAP)
-  const [roundtable, setRoundtable] = useState<Roundtable>(MOCK_ROUNDTABLE)
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES)
+  const [events, setEvents] = useState<Event[]>([])
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [emojiMap, setEmojiMap] = useState<Record<number, EmojiType>>({})
+  const [roundtable, setRoundtable] = useState<Roundtable>({ members: [] })
+  const [messages, setMessages] = useState<Message[]>([])
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
   const [userAttrs, setUserAttrs] = useState<Record<string, number>>({})
   const [text, setText] = useState('')
@@ -882,9 +954,24 @@ export function EventPage() {
   const [pollError, setPollError] = useState('')
   const [creatingPoll, setCreatingPoll] = useState(false)
   const [votingPollId, setVotingPollId] = useState<number | null>(null)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupLoading, setNewGroupLoading] = useState(false)
+  const [newGroupError, setNewGroupError] = useState('')
+  const [smallView, setSmallView] = useState<'roundtable' | 'chat'>('chat')
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth)
+  const [showInvite, setShowInvite] = useState(false)
+  const inviteRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const viewerId = me?.userId ?? null
+
+  useLayoutEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const isSmall = windowWidth < 900
 
   useLayoutEffect(() => {
     const page = document.querySelector('.page') as HTMLElement | null
@@ -894,6 +981,24 @@ export function EventPage() {
     return () => { page.style.padding = prev }
   }, [])
 
+  // Sync dark mode to document so App.css header/body rules respond
+  useEffect(() => {
+    document.documentElement.dataset.dark = darkMode ? '1' : ''
+    return () => { document.documentElement.dataset.dark = '' }
+  }, [darkMode])
+
+  // Close invite panel on outside click
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (inviteRef.current && !inviteRef.current.contains(e.target as Node)) {
+        setShowInvite(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  // Load me, emoji types on mount
   useEffect(() => {
     apiGet<Me>('/auth/me').then(me => {
       setMe(me)
@@ -901,48 +1006,59 @@ export function EventPage() {
         .then(r => { const m: Record<string, number> = {}; r.attributes.forEach(a => m[a.key] = a.score); setUserAttrs(m) })
         .catch(() => {})
     }).catch(() => {})
-    apiGet<Group[]>('/groups').then(gs => {
-      setGroups(gs)
-      if (gs.length > 0) setSelectedGroup(gs[0])
-    }).catch(() => {})
     fetch(`${API_BASE}/emoji-types`)
       .then(r => r.json())
       .then((types: EmojiType[]) => { const m: Record<number, EmojiType> = {}; types.forEach(t => m[t.id] = t); setEmojiMap(m) })
       .catch(() => {})
   }, [])
 
-  async function refreshCurrentGroupData(group = selectedGroup, currentViewerId = viewerId) {
-    if (!group) return
+  // Load groups when me is available
+  useEffect(() => {
+    if (!me) return
+    apiGet<Group[]>('/groups').then(gs => {
+      setGroups(gs)
+      if (gs.length > 0) setSelectedGroup(gs[0])
+    }).catch(() => {})
+  }, [me])
 
-    const loadRT = apiGet<Roundtable>(`/roundtable?groupId=${group.id}`).then(setRoundtable).catch(() => {})
+  // Load events when group changes
+  useEffect(() => {
+    if (!selectedGroup) return
+    apiGet<Event[]>(`/groups/${selectedGroup.id}/events`).then(evts => {
+      setEvents(evts)
+      if (evts.length > 0) setSelectedEvent(evts[0])
+      else setSelectedEvent(null)
+    }).catch(() => {})
+  }, [selectedGroup])
+
+  // Load roundtable, messages, websocket when event changes
+  async function loadSelectedEventData(event = selectedEvent, currentViewerId = viewerId) {
+    if (!event) return
+
+    const loadRT = apiGet<Roundtable>(`/roundtable?eventId=${event.id}`).then(setRoundtable).catch(() => {})
     const loadMsgs = apiGet<Message[]>(
-      `/groups/${group.id}/messages${currentViewerId ? `?viewerUserId=${currentViewerId}` : ''}`,
+      `/events/${event.id}/messages${currentViewerId ? `?viewerUserId=${currentViewerId}` : ''}`,
     ).then(setMessages).catch(() => {})
     const loadFeed = currentViewerId
-      ? apiGet<FeedMessage[]>(`/groups/${group.id}/feed?userId=${currentViewerId}`).then(setFeedMessages).catch(() => {})
+      ? apiGet<FeedMessage[]>(`/events/${event.id}/feed?userId=${currentViewerId}`).then(setFeedMessages).catch(() => {})
       : Promise.resolve()
 
     await Promise.all([loadRT, loadMsgs, loadFeed])
   }
 
-  useEffect(() => {
-    if (!selectedGroup) return
-    const refreshData = () => {
-      const loadRT = apiGet<Roundtable>(`/roundtable?groupId=${selectedGroup.id}`).then(setRoundtable).catch(() => {})
-      const loadMsgs = apiGet<Message[]>(
-        `/groups/${selectedGroup.id}/messages${viewerId ? `?viewerUserId=${viewerId}` : ''}`,
-      ).then(setMessages).catch(() => {})
-      const loadFeed = viewerId
-        ? apiGet<FeedMessage[]>(`/groups/${selectedGroup.id}/feed?userId=${viewerId}`).then(setFeedMessages).catch(() => {})
-        : Promise.resolve()
+  const refreshSelectedEventData = useEffectEvent((event = selectedEvent, currentViewerId = viewerId) => {
+    void loadSelectedEventData(event, currentViewerId)
+  })
 
-      void Promise.all([loadRT, loadMsgs, loadFeed])
-    }
+  useEffect(() => {
+    if (!selectedEvent) return
+    const eid = selectedEvent.id
+    const refreshData = () => { void refreshSelectedEventData(selectedEvent, viewerId) }
 
     refreshData()
 
     const wsUrl = API_BASE.replace(/^http/, 'ws')
-    const ws = new WebSocket(`${wsUrl}?groupId=${selectedGroup.id}`)
+    const ws = new WebSocket(`${wsUrl}?eventId=${eid}`)
     wsRef.current = ws
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data)
@@ -951,39 +1067,56 @@ export function EventPage() {
       }
     }
     return () => { ws.close() }
-  }, [selectedGroup, viewerId])
+  }, [selectedEvent, viewerId])
 
   useEffect(() => {
-    if (!aiSorted) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, aiSorted])
 
   const sendMessage = async () => {
-    if (!text.trim() || !selectedGroup || !me) return
-    try { await apiPost('/messages', { groupId: selectedGroup.id, senderId: me.userId, content: text.trim() }); setText('') }
-    catch { /* silent */ }
-  }
-
-  const updateGroupField = async (field: string, value: string) => {
-    if (!selectedGroup) return
+    if (!text.trim() || !selectedEvent || !me) return
     try {
-      const updated = await apiPatch<Group>(`/groups/${selectedGroup.id}`, { [field]: value })
-      setSelectedGroup(updated)
-      setGroups(prev => prev.map(g => g.id === updated.id ? updated : g))
+      await apiPost('/messages', { eventId: selectedEvent.id, senderId: me.userId, content: text.trim() })
+      setText('')
     } catch { /* silent */ }
   }
 
-  const handleSuggestEvent = async () => {
-    if (!suggestName.trim() || !suggestMsg.trim() || !me) {
+  const updateEventField = async (field: string, value: string) => {
+    if (!selectedEvent) return
+    try {
+      const updated = await apiPatch<Event>(`/events/${selectedEvent.id}`, { [field]: value })
+      setSelectedEvent(updated)
+      setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
+    } catch { /* silent */ }
+  }
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim() || !me) { setNewGroupError('Enter a group name.'); return }
+    setNewGroupLoading(true)
+    setNewGroupError('')
+    try {
+      const group = await apiPost<Group>('/groups', { name: newGroupName.trim() })
+      setGroups(prev => [...prev, group])
+      setSelectedGroup(group)
+      setNewGroupName('')
+    } catch (err: unknown) {
+      setNewGroupError((err as Error)?.message ?? 'Failed to create group.')
+    }
+    setNewGroupLoading(false)
+  }
+
+  const handleCreateEvent = async () => {
+    if (!suggestName.trim() || !suggestMsg.trim() || !me || !selectedGroup) {
       setSuggestError('Please fill in both fields.')
       return
     }
     setSuggestLoading(true)
     setSuggestError('')
     try {
-      const group = await apiPost<Group>('/groups', { name: suggestName.trim() })
-      await apiPost('/messages', { groupId: group.id, senderId: me.userId, content: suggestMsg.trim() })
-      setGroups(prev => [...prev, group])
-      setSelectedGroup(group)
+      const event = await apiPost<Event>(`/groups/${selectedGroup.id}/events`, { name: suggestName.trim() })
+      await apiPost('/messages', { eventId: event.id, senderId: me.userId, content: suggestMsg.trim() })
+      setEvents(prev => [event, ...prev])
+      setSelectedEvent(event)
       setCurrentView('current')
       setSuggestName('')
       setSuggestMsg('')
@@ -994,7 +1127,7 @@ export function EventPage() {
   }
 
   const handleCreatePoll = async () => {
-    if (!selectedGroup || !me) return
+    if (!selectedEvent || !me || viewerId === null) return
 
     const trimmedQuestion = pollQuestion.trim()
     const trimmedOptions = pollOptions.map((option) => option.trim()).filter(Boolean)
@@ -1012,7 +1145,7 @@ export function EventPage() {
     setCreatingPoll(true)
     setPollError('')
     try {
-      await apiPost(`/groups/${selectedGroup.id}/polls`, {
+      await apiPost(`/events/${selectedEvent.id}/polls`, {
         userId: viewerId,
         question: trimmedQuestion,
         options: trimmedOptions,
@@ -1022,7 +1155,7 @@ export function EventPage() {
       setPollOptions(['', ''])
       setPollAllowsMultiple(false)
       setShowPollComposer(false)
-      await refreshCurrentGroupData(selectedGroup, viewerId)
+      await loadSelectedEventData(selectedEvent, viewerId)
     } catch (err) {
       setPollError(err instanceof Error ? err.message : 'Failed to create poll.')
     }
@@ -1030,7 +1163,7 @@ export function EventPage() {
   }
 
   const handleVotePoll = async (pollId: number, selectedOptionIds: number[]) => {
-    if (!me) return
+    if (!me || !selectedEvent || viewerId === null) return
 
     setVotingPollId(pollId)
     try {
@@ -1038,7 +1171,7 @@ export function EventPage() {
         userId: viewerId,
         optionIds: selectedOptionIds,
       })
-      await refreshCurrentGroupData(selectedGroup, viewerId)
+      await loadSelectedEventData(selectedEvent, viewerId)
     } catch {
       // keep silent to avoid noisy chat UI
     }
@@ -1047,7 +1180,9 @@ export function EventPage() {
 
   // ── Derived ──
   const allMembers = roundtable.members
-  const comingEmojiId = Object.values(emojiMap).find(e => e.name === 'coming')?.id ?? null
+  const comingEmojiId    = Object.values(emojiMap).find(e => e.name === 'coming')?.id    ?? null
+  const notComingEmojiId = Object.values(emojiMap).find(e => e.name === 'not_coming')?.id ?? null
+  const maybeEmojiId     = Object.values(emojiMap).find(e => e.name === 'maybe')?.id      ?? null
   const hasAttrs = Object.keys(userAttrs).length > 0
 
   const members = hasAttrs
@@ -1056,13 +1191,14 @@ export function EventPage() {
         .sort((a, b) => memberRelevance(b, emojiMap, userAttrs) - memberRelevance(a, emojiMap, userAttrs))
     : allMembers
 
-  const comingMembers       = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'coming')
-  const notRespondedMembers = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'not-responded')
-  const notComingMembers    = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'not-coming')
+  const comingMembers       = allMembers.filter(m => getMemberStatus(m, comingEmojiId, notComingEmojiId, maybeEmojiId) === 'coming')
+  const notRespondedMembers = allMembers.filter(m => getMemberStatus(m, comingEmojiId, notComingEmojiId, maybeEmojiId) === 'not-responded')
+  const notComingMembers    = allMembers.filter(m => getMemberStatus(m, comingEmojiId, notComingEmojiId, maybeEmojiId) === 'not-coming')
 
   const displayMessages = aiSorted
     ? (feedMessages.length > 0 ? feedMessages : [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
         .filter(m => m.sender.id !== me?.userId)
+        .reverse()
     : [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
   const myRecentMessages = messages
@@ -1070,19 +1206,7 @@ export function EventPage() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3)
 
-  const allEventItems = groups.length > 0
-    ? groups.map(g => ({
-        id: g.id,
-        name: g.name ?? `Event ${g.id}`,
-        subtitle: g.location || 'No location yet',
-      }))
-    : [{
-        id: 0,
-        name: selectedGroup?.name ?? 'Park Hangout',
-        subtitle: selectedGroup?.location || 'Demo event',
-      }]
-
-  // ─────────────────────────────────────────────────────────────────────────────
+  const c = th(darkMode)
 
   return (
     <div style={{
@@ -1090,61 +1214,140 @@ export function EventPage() {
       left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 1380,
       overflow: 'hidden',
-      background: darkMode ? '#0f172a' : '#f3f4f6',
-      filter: darkMode ? 'brightness(0.7)' : 'none',
-      transition: 'background 0.2s, filter 0.2s',
+      background: c.pageBg,
+      transition: 'background 0.2s',
       zIndex: 0,
-      display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 12,
-      padding: 16, boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: isSmall ? 8 : 12,
+      padding: isSmall ? 8 : 16, boxSizing: 'border-box',
     }}>
 
-      {/* Top group header */}
-      <div className="flex items-center gap-3 px-1">
-        <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
-        <button
-          type="button"
-          title="Invite members"
-          aria-label="Invite members"
-          className="ml-1 h-9 w-9 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-        >
-          👤+
-        </button>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium">Dark Mode</span>
+      {/* Top header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 4px', flexShrink: 0 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>
+          {selectedEvent?.name ?? (selectedGroup ? '—' : 'No group')}
+        </div>
+
+        {/* Invite button with panel */}
+        {selectedGroup && (
+          <div ref={inviteRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              title="Invite members"
+              onClick={() => setShowInvite(v => !v)}
+              style={{
+                height: 36, width: 36, borderRadius: '50%',
+                border: `1px solid ${c.border}`, background: showInvite ? c.muted : 'transparent',
+                color: c.textSub, cursor: 'pointer', flexShrink: 0, fontSize: 14,
+              }}
+            >
+              👤+
+            </button>
+            {showInvite && (
+              <InvitePanel
+                groupId={selectedGroup.id}
+                darkMode={darkMode}
+                onClose={() => setShowInvite(false)}
+              />
+            )}
+          </div>
+        )}
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 12, color: c.textSub, fontWeight: 500 }}>Dark Mode</span>
           <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
         </div>
       </div>
 
+      {/* Small-screen tab strip */}
+      {isSmall && (
+        <div style={{
+          display: 'flex', flexShrink: 0,
+          background: c.muted, borderRadius: 12, padding: 4, gap: 4,
+        }}>
+          {(['roundtable', 'chat'] as const).map(view => (
+            <button
+              key={view}
+              onClick={() => setSmallView(view)}
+              style={{
+                flex: 1, padding: '7px 0', borderRadius: 9, border: 'none',
+                background: smallView === view ? c.tabActiveBg : c.tabInactBg,
+                color: smallView === view ? c.text : c.textSub,
+                fontWeight: smallView === view ? 600 : 400,
+                fontSize: 13, cursor: 'pointer',
+                boxShadow: smallView === view ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            >
+              {view === 'roundtable' ? '🧑‍🤝‍🧑 Round Table' : '💬 Chat'}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
+
       {/* ── Left — Round Table ── */}
-      <div style={{
-        width: 660, flexShrink: 0, background: 'white',
-        borderRadius: 24, padding: '20px 20px 16px',
-        boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+      {(!isSmall || smallView === 'roundtable') && <div style={{
+        flex: isSmall ? '1' : '0 0 clamp(380px, 46%, 660px)',
+        background: c.panelBg,
+        borderRadius: 24, padding: '14px 16px 12px',
+        boxShadow: darkMode ? '0 1px 8px rgba(0,0,0,0.3)' : '0 1px 8px rgba(0,0,0,0.07)',
         display: 'flex', flexDirection: 'column',
-        boxSizing: 'border-box', overflow: 'hidden',
+        boxSizing: 'border-box', overflow: 'hidden', minHeight: 0,
+        transition: 'background 0.2s',
       }}>
 
-        {/* Groups selector */}
-        <div className="mb-2 flex items-center gap-3">
-          <div className="relative">
+        {/* Group + Event selectors */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          {/* Group selector */}
+          <div style={{ position: 'relative' }}>
             <select
-              className="appearance-none pl-4 pr-8 py-1.5 text-sm text-white rounded-full cursor-pointer"
-              style={{ background: GRAD, border: 'none', outline: 'none' }}
+              style={{
+                appearance: 'none', paddingLeft: 12, paddingRight: 28, paddingTop: 6, paddingBottom: 6,
+                fontSize: 13, color: 'white', borderRadius: 20, cursor: 'pointer',
+                background: GRAD, border: 'none', outline: 'none',
+              }}
               value={selectedGroup?.id ?? ''}
-              onChange={e => { const g = groups.find(g => g.id === Number(e.target.value)); if (g) setSelectedGroup(g) }}
+              onChange={e => {
+                const g = groups.find(g => g.id === Number(e.target.value))
+                if (g) setSelectedGroup(g)
+              }}
             >
               <option value="">Select Group</option>
               {groups.map(g => (
-                <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name ?? `Group ${g.id}`}</option>
+                <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name}</option>
               ))}
             </select>
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white text-xs pointer-events-none">▾</span>
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'white', fontSize: 9, pointerEvents: 'none' }}>▾</span>
           </div>
+
+          {/* Event selector — only shown if group is selected */}
+          {selectedGroup && (
+            <div style={{ position: 'relative' }}>
+              <select
+                style={{
+                  appearance: 'none', paddingLeft: 12, paddingRight: 28, paddingTop: 6, paddingBottom: 6,
+                  fontSize: 13, color: c.text, borderRadius: 20, cursor: 'pointer',
+                  background: c.muted, border: `1px solid ${c.border}`, outline: 'none',
+                }}
+                value={selectedEvent?.id ?? ''}
+                onChange={e => {
+                  const ev = events.find(ev => ev.id === Number(e.target.value))
+                  if (ev) setSelectedEvent(ev)
+                }}
+              >
+                <option value="">Select Event</option>
+                {events.map(ev => (
+                  <option key={ev.id} value={ev.id} style={{ background: '#1e293b', color: 'white' }}>{ev.name}</option>
+                ))}
+              </select>
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: c.textSub, fontSize: 9, pointerEvents: 'none' }}>▾</span>
+            </div>
+          )}
         </div>
 
         {/* Donut Ring */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600, marginTop: -10 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', marginTop: -10 }}>
           <DonutRing
             members={members}
             emojiMap={emojiMap}
@@ -1152,10 +1355,11 @@ export function EventPage() {
             hoveredEmoji={hoveredEmoji}
             onHover={setHoveredMember}
             onEmojiHover={setHoveredEmoji}
+            darkMode={darkMode}
           />
         </div>
 
-        {/* Stats with tooltip */}
+        {/* Stats */}
         <EventStats
           coming={comingMembers.length}
           notResponded={notRespondedMembers.length}
@@ -1165,24 +1369,25 @@ export function EventPage() {
           notComingMembers={notComingMembers}
           hoveredStat={hoveredStat}
           onStatHover={setHoveredStat}
+          darkMode={darkMode}
         />
 
         {/* Event Details */}
-        <div className="mt-1 px-1">
-          <EventDetails group={selectedGroup} onEdit={updateGroupField} />
+        <div style={{ marginTop: 4, padding: '0 4px' }}>
+          <EventDetails event={selectedEvent} onEdit={updateEventField} darkMode={darkMode} />
         </div>
-      </div>
+      </div>}
 
       {/* ── Right — Messaging ── */}
-      <div style={{
-        flex: 1, minWidth: 360, background: 'white',
-        borderRadius: 24, boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+      {(!isSmall || smallView === 'chat') && <div style={{
+        flex: 1, minWidth: isSmall ? 0 : 280, background: c.panelBg,
+        borderRadius: 24, boxShadow: darkMode ? '0 1px 8px rgba(0,0,0,0.3)' : '0 1px 8px rgba(0,0,0,0.07)',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        boxSizing: 'border-box',
+        boxSizing: 'border-box', transition: 'background 0.2s',
       }}>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #f3f4f6' }}>
+        <div style={{ display: 'flex', flexShrink: 0, borderBottom: `1px solid ${c.border}` }}>
           <button
             onClick={() => setCurrentView('suggest')}
             style={{
@@ -1199,9 +1404,9 @@ export function EventPage() {
             onClick={() => setCurrentView('current')}
             style={{
               flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'current' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'current' ? '#111827' : '#9ca3af',
-              border: 'none', cursor: 'pointer', borderRadius: '0 24px 0 0',
+              background: currentView === 'current' ? c.muted : c.panelBg,
+              color: currentView === 'current' ? c.text : c.textFaint,
+              border: 'none', cursor: 'pointer',
               transition: 'background 0.15s, color 0.15s',
             }}
           >
@@ -1211,10 +1416,10 @@ export function EventPage() {
             onClick={() => setCurrentView('all')}
             style={{
               flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'all' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'all' ? '#111827' : '#9ca3af',
+              background: currentView === 'all' ? c.muted : c.panelBg,
+              color: currentView === 'all' ? c.text : c.textFaint,
               border: 'none', cursor: 'pointer',
-              borderLeft: '1px solid #f3f4f6',
+              borderLeft: `1px solid ${c.border}`,
               borderRadius: '0 24px 0 0',
               transition: 'background 0.15s, color 0.15s',
             }}
@@ -1223,45 +1428,82 @@ export function EventPage() {
           </button>
         </div>
 
-        {/* ── Suggest Event form ── */}
+        {/* ── New Event form ── */}
         {currentView === 'suggest' && (
           <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: '28px 32px', gap: 20 }}>
+
+            {/* ── New Group ── */}
+            <div style={{ borderRadius: 14, border: `1px solid ${c.border}`, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: c.text }}>New Group</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={newGroupName}
+                  onChange={e => setNewGroupName(e.target.value)}
+                  placeholder="e.g. College Friends"
+                  onKeyDown={e => e.key === 'Enter' && handleCreateGroup()}
+                  style={{ flex: 1, borderRadius: 8, border: `1.5px solid ${c.border}`, padding: '8px 12px', fontSize: 13, color: c.text, outline: 'none', background: c.inputBg }}
+                  onFocus={e => (e.target.style.borderColor = '#93c5fd')}
+                  onBlur={e => (e.target.style.borderColor = c.border)}
+                />
+                <button
+                  onClick={handleCreateGroup}
+                  disabled={newGroupLoading || !me}
+                  style={{
+                    background: GRAD, color: 'white', border: 'none', borderRadius: 8,
+                    padding: '8px 16px', fontSize: 13, fontWeight: 600,
+                    cursor: (newGroupLoading || !me) ? 'not-allowed' : 'pointer',
+                    opacity: (newGroupLoading || !me) ? 0.7 : 1, whiteSpace: 'nowrap',
+                  }}
+                >
+                  {newGroupLoading ? '…' : 'Create'}
+                </button>
+              </div>
+              {newGroupError && <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{newGroupError}</p>}
+              {!me && <p style={{ margin: 0, fontSize: 12, color: c.textFaint }}>Sign in to create a group.</p>}
+            </div>
+
+            <div style={{ height: 1, background: c.border }} />
+
             <div>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Suggest a New Event</h3>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#9ca3af' }}>Create a group and kick off the conversation.</p>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: c.text }}>New Event</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: c.textFaint }}>
+                {selectedGroup ? `Adding to "${selectedGroup.name}"` : 'Create or select a group first.'}
+              </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Event name</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: c.textSub }}>Event name</label>
               <input
                 value={suggestName}
                 onChange={e => setSuggestName(e.target.value)}
                 placeholder="e.g. Park Hangout Saturday"
-                style={{ borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '9px 14px', fontSize: 14, color: '#111827', outline: 'none', background: '#fafafa' }}
+                disabled={!selectedGroup}
+                style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 14px', fontSize: 14, color: c.text, outline: 'none', background: c.inputBg }}
                 onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#93c5fd' }}
-                onBlur={e => { (e.target as HTMLInputElement).style.borderColor = '#e5e7eb' }}
+                onBlur={e => { (e.target as HTMLInputElement).style.borderColor = c.border }}
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Initial message</label>
+              <label style={{ fontSize: 13, fontWeight: 600, color: c.textSub }}>Initial message</label>
               <textarea
                 value={suggestMsg}
                 onChange={e => setSuggestMsg(e.target.value)}
                 placeholder="e.g. Hey everyone! Who's down for a park hangout this Saturday at 3pm?"
                 rows={4}
-                style={{ borderRadius: 10, border: '1.5px solid #e5e7eb', padding: '9px 14px', fontSize: 14, color: '#111827', outline: 'none', background: '#fafafa', resize: 'none', fontFamily: 'inherit' }}
+                disabled={!selectedGroup}
+                style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 14px', fontSize: 14, color: c.text, outline: 'none', background: c.inputBg, resize: 'none', fontFamily: 'inherit' }}
                 onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#93c5fd' }}
-                onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#e5e7eb' }}
+                onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = c.border }}
               />
             </div>
             {suggestError && <p style={{ margin: 0, fontSize: 13, color: '#ef4444' }}>{suggestError}</p>}
             <button
-              onClick={handleSuggestEvent}
-              disabled={suggestLoading}
+              onClick={handleCreateEvent}
+              disabled={suggestLoading || !selectedGroup}
               style={{
                 background: GRAD, color: 'white', border: 'none', borderRadius: 12,
                 padding: '11px 24px', fontSize: 14, fontWeight: 600,
-                cursor: suggestLoading ? 'not-allowed' : 'pointer',
-                opacity: suggestLoading ? 0.7 : 1, alignSelf: 'flex-start',
+                cursor: (suggestLoading || !selectedGroup) ? 'not-allowed' : 'pointer',
+                opacity: (suggestLoading || !selectedGroup) ? 0.7 : 1, alignSelf: 'flex-start',
                 boxShadow: '0 2px 8px rgba(96,165,250,0.25)', transition: 'opacity 0.15s',
               }}
             >
@@ -1270,50 +1512,57 @@ export function EventPage() {
           </div>
         )}
 
-        {/* ── Current Events ── */}
+        {/* ── Current Event chat ── */}
         {currentView === 'current' && (
           <>
-            <div className="px-5 pt-4 pb-3 flex-shrink-0">
+            <div style={{ padding: '16px 20px 12px', flexShrink: 0 }}>
               <div>
-                <h2 className="font-bold text-[22px] text-slate-800 leading-tight">
-                  {selectedGroup?.name ?? 'Park Hangout'}
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: c.text, lineHeight: 1.3 }}>
+                  {selectedEvent?.name ?? (selectedGroup ? 'No events yet' : 'No group selected')}
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Group Chat</p>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: c.textFaint }}>
+                  {selectedGroup?.name ?? 'Select a group to get started'}
+                </p>
               </div>
-              <div className="flex items-center gap-2 mt-2.5">
-                <span className="text-xs text-slate-500">For You Filter</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                <span style={{ fontSize: 12, color: c.textSub }}>For You Filter</span>
                 <Toggle on={aiSorted} onToggle={() => setAiSorted(v => !v)} />
               </div>
             </div>
 
-            <div style={{ height: 1, background: '#f3f4f6', flexShrink: 0 }} />
+            <div style={{ height: 1, background: c.border, flexShrink: 0 }} />
 
-            <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-3 min-h-0">
-              {displayMessages.length === 0
-                ? <p className="text-xs text-slate-300 text-center mt-8">No messages yet</p>
-                : displayMessages.map(msg => (
-                    <MessageItem
-                      key={msg.id}
-                      msg={msg}
-                      meId={me?.userId ?? null}
-                      votingPollId={votingPollId}
-                      onVotePoll={handleVotePoll}
-                    />
-                  ))
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+              {!selectedEvent
+                ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>
+                    {selectedGroup ? 'No events in this group yet. Create one with + New.' : 'Sign in and select a group to get started.'}
+                  </p>
+                : displayMessages.length === 0
+                  ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>No messages yet</p>
+                  : displayMessages.map(msg => (
+                      <MessageItem
+                        key={msg.id}
+                        msg={msg}
+                        meId={me?.userId ?? null}
+                        votingPollId={votingPollId}
+                        onVotePoll={handleVotePoll}
+                        darkMode={darkMode}
+                      />
+                    ))
               }
               <div ref={messagesEndRef} />
             </div>
 
             {aiSorted && myRecentMessages.length > 0 && (
-              <div className="flex-shrink-0 px-5 py-2.5" style={{ borderTop: '1px solid #f3f4f6', background: '#fafafa' }}>
-                <p className="text-xs font-semibold text-slate-400 mb-2">Your Recent Messages</p>
-                <div className="flex flex-col gap-1.5">
-                  {myRecentMessages.map(msg => <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} compact />)}
+              <div style={{ flexShrink: 0, padding: '10px 20px', borderTop: `1px solid ${c.border}`, background: c.panelBg2 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: c.textFaint, margin: '0 0 8px' }}>Your Recent Messages</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
+                  {myRecentMessages.map(msg => <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} compact darkMode={darkMode} />)}
                 </div>
               </div>
             )}
 
-            <div className="flex-shrink-0 px-4 py-3 flex gap-2.5 items-center" style={{ borderTop: '1px solid #f3f4f6' }}>
+            <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', borderTop: `1px solid ${c.border}` }}>
               {showPollComposer && (
                 <div
                   style={{
@@ -1321,20 +1570,20 @@ export function EventPage() {
                     right: 20,
                     bottom: 72,
                     width: 320,
-                    background: 'white',
-                    border: '1px solid #dbe3ee',
+                    background: c.panelBg,
+                    border: `1px solid ${c.border}`,
                     borderRadius: 18,
                     padding: 16,
-                    boxShadow: '0 18px 40px rgba(15,23,42,0.16)',
+                    boxShadow: darkMode ? '0 18px 40px rgba(2,6,23,0.45)' : '0 18px 40px rgba(15,23,42,0.16)',
                     zIndex: 20,
                   }}
                 >
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>Create Poll</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: c.text, marginBottom: 10 }}>Create Poll</div>
                   <input
                     value={pollQuestion}
                     onChange={(e) => setPollQuestion(e.target.value)}
                     placeholder="Question"
-                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #dbe3ee', borderRadius: 12, padding: '10px 12px', fontSize: 13, marginBottom: 10 }}
+                    style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${c.border}`, borderRadius: 12, padding: '10px 12px', fontSize: 13, marginBottom: 10, background: c.inputBg, color: c.text }}
                   />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {pollOptions.map((option, index) => (
@@ -1343,7 +1592,7 @@ export function EventPage() {
                         value={option}
                         onChange={(e) => setPollOptions((current) => current.map((value, i) => i === index ? e.target.value : value))}
                         placeholder={`Option ${index + 1}`}
-                        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #dbe3ee', borderRadius: 12, padding: '9px 12px', fontSize: 13 }}
+                        style={{ width: '100%', boxSizing: 'border-box', border: `1px solid ${c.border}`, borderRadius: 12, padding: '9px 12px', fontSize: 13, background: c.inputBg, color: c.text }}
                       />
                     ))}
                   </div>
@@ -1352,7 +1601,7 @@ export function EventPage() {
                       <button
                         type="button"
                         onClick={() => setPollOptions((current) => [...current, ''])}
-                        style={{ border: '1px solid #cbd5e1', background: 'white', borderRadius: 999, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+                        style={{ border: `1px solid ${c.border}`, background: c.panelBg, borderRadius: 999, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: c.textSub, cursor: 'pointer' }}
                       >
                         + Option
                       </button>
@@ -1361,13 +1610,13 @@ export function EventPage() {
                       <button
                         type="button"
                         onClick={() => setPollOptions((current) => current.slice(0, -1))}
-                        style={{ border: '1px solid #cbd5e1', background: 'white', borderRadius: 999, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+                        style={{ border: `1px solid ${c.border}`, background: c.panelBg, borderRadius: 999, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: c.textSub, cursor: 'pointer' }}
                       >
                         Remove
                       </button>
                     )}
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: '#475569' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: c.textSub }}>
                     <input
                       type="checkbox"
                       checked={pollAllowsMultiple}
@@ -1380,15 +1629,15 @@ export function EventPage() {
                     <button
                       type="button"
                       onClick={() => { setShowPollComposer(false); setPollError('') }}
-                      style={{ border: '1px solid #cbd5e1', background: 'white', borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 600, color: '#475569', cursor: 'pointer' }}
+                      style={{ border: `1px solid ${c.border}`, background: c.panelBg, borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 600, color: c.textSub, cursor: 'pointer' }}
                     >
                       Cancel
                     </button>
                     <button
                       type="button"
                       onClick={handleCreatePoll}
-                      disabled={creatingPoll}
-                      style={{ border: 'none', background: GRAD, color: 'white', borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: creatingPoll ? 'not-allowed' : 'pointer', opacity: creatingPoll ? 0.7 : 1 }}
+                      disabled={creatingPoll || !selectedEvent}
+                      style={{ border: 'none', background: GRAD, color: 'white', borderRadius: 999, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: creatingPoll || !selectedEvent ? 'not-allowed' : 'pointer', opacity: creatingPoll || !selectedEvent ? 0.7 : 1 }}
                     >
                       {creatingPoll ? 'Creating…' : 'Post poll'}
                     </button>
@@ -1396,10 +1645,10 @@ export function EventPage() {
                 </div>
               )}
               <input
-                className="flex-1 rounded-full px-4 py-2 text-sm outline-none text-slate-700"
-                style={{ background: '#f3f4f6', border: 'none' }}
-                placeholder="Type a message..."
+                style={{ flex: 1, borderRadius: 20, padding: '8px 16px', fontSize: 14, outline: 'none', background: c.inputBg, border: 'none', color: c.text }}
+                placeholder={selectedEvent && me ? 'Type a message...' : selectedEvent ? 'Sign in to send messages' : 'Select an event first'}
                 value={text}
+                disabled={!selectedEvent || !me}
                 onChange={e => setText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
               />
@@ -1407,7 +1656,8 @@ export function EventPage() {
                 type="button"
                 onClick={() => setShowPollComposer((current) => !current)}
                 className="flex-shrink-0 rounded-full"
-                style={{ width: 38, height: 38, border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', fontSize: 16, color: '#334155' }}
+                disabled={!selectedEvent || !me}
+                style={{ width: 38, height: 38, border: `1px solid ${c.border}`, background: c.panelBg, cursor: !selectedEvent || !me ? 'not-allowed' : 'pointer', fontSize: 16, color: c.textSub, opacity: !selectedEvent || !me ? 0.5 : 1 }}
                 title="Create poll"
                 aria-label="Create poll"
               >
@@ -1415,8 +1665,8 @@ export function EventPage() {
               </button>
               <button
                 onClick={sendMessage}
-                className="flex-shrink-0 flex items-center justify-center rounded-full text-white font-bold text-base"
-                style={{ width: 38, height: 38, background: GRAD, border: 'none', cursor: 'pointer' }}
+                disabled={!selectedEvent || !me}
+                style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', background: GRAD, border: 'none', cursor: (!selectedEvent || !me) ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700, fontSize: 16, opacity: (!selectedEvent || !me) ? 0.5 : 1 }}
               >
                 ↑
               </button>
@@ -1424,33 +1674,38 @@ export function EventPage() {
           </>
         )}
 
+        {/* ── All Events list ── */}
         {currentView === 'all' && (
           <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-            <h3 className="m-0 text-base font-semibold text-slate-800">All Events</h3>
-            <p className="mt-1 mb-4 text-xs text-slate-400">Select an event in this group.</p>
-            <div className="flex flex-col gap-2">
-              {allEventItems.map(event => (
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: c.text }}>
+              {selectedGroup ? `Events in ${selectedGroup.name}` : 'All Events'}
+            </h3>
+            <p style={{ marginTop: 4, marginBottom: 16, fontSize: 12, color: c.textFaint }}>
+              {selectedGroup ? 'Click an event to view its chat.' : 'Select a group to see events.'}
+            </p>
+            {events.length === 0 && selectedGroup && (
+              <p style={{ fontSize: 12, color: c.textFaint }}>No events yet. Create one with + New.</p>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {events.map(event => (
                 <button
                   key={event.id}
-                  onClick={() => {
-                    const group = groups.find(g => g.id === event.id)
-                    if (group) setSelectedGroup(group)
-                    setCurrentView('current')
-                  }}
-                  className="w-full text-left rounded-xl border px-3 py-2.5 transition-colors"
+                  onClick={() => { setSelectedEvent(event); setCurrentView('current') }}
                   style={{
-                    borderColor: selectedGroup?.id === event.id ? '#93c5fd' : '#e5e7eb',
-                    background: selectedGroup?.id === event.id ? '#eff6ff' : 'white',
+                    width: '100%', textAlign: 'left', borderRadius: 12,
+                    border: `1.5px solid ${selectedEvent?.id === event.id ? '#93c5fd' : c.border}`,
+                    padding: '10px 14px', cursor: 'pointer',
+                    background: selectedEvent?.id === event.id ? (darkMode ? '#1e3a5f' : '#eff6ff') : c.panelBg,
                   }}
                 >
-                  <div className="text-sm font-medium text-slate-800">{event.name}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{event.subtitle}</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{event.name}</div>
+                  <div style={{ fontSize: 12, color: c.textFaint, marginTop: 2 }}>{event.location || 'No location yet'}</div>
                 </button>
               ))}
             </div>
           </div>
         )}
-      </div>
+      </div>}
       </div>
     </div>
   )
