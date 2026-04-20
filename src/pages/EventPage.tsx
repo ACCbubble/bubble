@@ -657,7 +657,7 @@ export interface MessageItemProps {
   darkMode: boolean
 }
 
-function PollCard({
+function InteractivePollCard({
   poll,
   compact,
   disabled,
@@ -858,7 +858,7 @@ function MessageItem({ msg, meId, compact = false, votingPollId = null, onVotePo
               {msg.sender.name[0].toUpperCase()}
             </div>
           )}
-          <PollCard
+          <InteractivePollCard
             key={`${poll.id}:${poll.viewerVoteOptionIds.join(',')}`}
             poll={poll}
             compact={compact}
