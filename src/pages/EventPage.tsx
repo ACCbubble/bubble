@@ -6,8 +6,9 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Me { userId: number; name: string }
-interface Group {
-  id: number; name: string | null
+interface Group { id: number; name: string }
+interface Event {
+  id: number; groupId: number; name: string
   location: string | null; eventTime: string | null; description: string | null
 }
 interface EmojiType { id: number; name: string; emoji: string }
@@ -19,39 +20,6 @@ interface FeedMessage extends Message { relevanceScore: number }
 interface UserAttribute { key: string; score: number }
 
 type Status = 'coming' | 'not-responded' | 'not-coming'
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_EMOJI_MAP: Record<number, EmojiType> = {
-  1: { id: 1, name: 'coming', emoji: '✅' },
-  2: { id: 2, name: 'needs_ride', emoji: '🚗' },
-  3: { id: 3, name: 'bringing_food', emoji: '🍕' },
-}
-
-const MOCK_ROUNDTABLE: Roundtable = {
-  members: [
-    { userId: 1, name: 'Andy', emojis: [
-      { emojiId: 1, score: 0.9, topQuotes: ["I'm in! What time should we meet?", "Count me in for sure", "See you all there!", "Can't wait"] },
-      { emojiId: 2, score: 0.7, topQuotes: ["I can give people rides if needed", "I have space for 3", "Happy to drive"] },
-    ]},
-    { userId: 2, name: 'Sidney', emojis: [] },
-    { userId: 3, name: 'Bartholomew', emojis: [] },
-    { userId: 4, name: 'Colin', emojis: [
-      { emojiId: 1, score: 0.85, topQuotes: ["Perfect! See you all there", "Definitely coming", "I'll be there at 6", "Excited!"] },
-      { emojiId: 3, score: 0.8, topQuotes: ["I'll bring snacks!", "Bringing chips and dip", "Happy to bring food"] },
-    ]},
-    { userId: 5, name: 'Christopher', emojis: [] },
-    { userId: 6, name: 'Manasa', emojis: [] },
-  ]
-}
-
-const MOCK_MESSAGES: Message[] = [
-  { id: 1, content: "Perfect! See you all there", createdAt: new Date(Date.now() - 23 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
-  { id: 2, content: "I might not make it, got a work thing", createdAt: new Date(Date.now() - 20 * 60000).toISOString(), sender: { id: 5, name: 'Rohan' } },
-  { id: 3, content: "I'm in! What time should we meet?", createdAt: new Date(Date.now() - 26 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 4, content: "I can give people rides if needed", createdAt: new Date(Date.now() - 18 * 60000).toISOString(), sender: { id: 1, name: 'Andy' } },
-  { id: 5, content: "I'll bring some games!", createdAt: new Date(Date.now() - 15 * 60000).toISOString(), sender: { id: 4, name: 'Colin' } },
-]
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -123,9 +91,8 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
   const n = members.length
   const GAP = n > 1 ? 1.0 : 0
   const degPer = 360 / Math.max(n, 1)
-  const EMOJI_R = (INNER + OUTER) / 2  // mid of the ring band
+  const EMOJI_R = (INNER + OUTER) / 2
 
-  // Center content: emoji hover shows quotes, member hover shows name+quotes
   let centerContent: React.ReactNode = (
     <div style={{ fontSize: 11, color: c.textFaint, textAlign: 'center' }}>
       {members.length === 0 ? 'No members yet' : 'hover a member'}
@@ -176,7 +143,6 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
     <div className="relative" style={{ width: '100%', maxWidth: SVG_SIZE, maxHeight: '100%', aspectRatio: '1 / 1' }}>
       <svg viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} width="100%" height="100%" style={{ display: 'block' }}>
         <defs>
-          {/* The same gradient used on the Groups selector, applied to the whole ring */}
           <linearGradient id="ringGrad" x1={CX - OUTER} y1={CY - OUTER} x2={CX + OUTER} y2={CY + OUTER} gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#86efac" />
             <stop offset="50%" stopColor="#60a5fa" />
@@ -192,10 +158,8 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           </filter>
         </defs>
 
-        {/* Center fill */}
         <circle cx={CX} cy={CY} r={INNER - 1} fill="url(#centerGrad)" />
 
-        {/* Slices — all use the unified ring gradient */}
         {members.map((m, i) => {
           const start = i * degPer + GAP
           const end = (i + 1) * degPer - GAP
@@ -224,7 +188,6 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           )
         })}
 
-        {/* Emojis floating inside the ring band */}
         {members.map((m, i) => {
           const start = i * degPer + GAP
           const end = (i + 1) * degPer - GAP
@@ -269,20 +232,17 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           )
         })}
 
-        {/* Avatars — outside the ring */}
         {members.map((m, i) => {
           const midDeg = (i + 0.5) * degPer
           const pos = polar(AVATAR_R, midDeg)
           const color = memberColor(m.userId)
           const isHov = m.userId === hoveredMember
-          // Truncate long names so badges never overflow the SVG canvas
           const MAX_LABEL = 10
           const displayName = m.name.length > MAX_LABEL
             ? m.name.slice(0, MAX_LABEL - 1) + '…'
             : m.name
           const nameW = Math.max(displayName.length * 7 + 18, 36)
           const nameH = 16
-          // Place badge below avatar, clamped so it never leaves the SVG bounds
           const rawNameX = pos.x - nameW / 2
           const nameX = Math.max(4, Math.min(SVG_SIZE - nameW - 4, rawNameX))
           const nameY = pos.y + 22
@@ -312,19 +272,15 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
               >
                 {m.name[0].toUpperCase()}
               </text>
-              {/* Name badge — clamped within SVG bounds */}
               <rect
-                x={nameX}
-                y={nameY}
-                width={nameW}
-                height={nameH}
+                x={nameX} y={nameY}
+                width={nameW} height={nameH}
                 rx={8}
                 fill={c.nameBadge}
                 style={{ pointerEvents: 'none' }}
               />
               <text
-                x={nameX + nameW / 2}
-                y={nameY + nameH / 2}
+                x={nameX + nameW / 2} y={nameY + nameH / 2}
                 textAnchor="middle" dominantBaseline="central"
                 fill={c.nameBadgeTxt} fontSize={9} fontWeight={600}
                 style={{ pointerEvents: 'none', userSelect: 'none' }}
@@ -336,7 +292,6 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
         })}
       </svg>
 
-      {/* Center info overlay — sized as % of container so it scales with the SVG */}
       <div
         className="absolute pointer-events-none flex flex-col items-center justify-center text-center"
         style={{
@@ -357,7 +312,6 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
 
 // ─── Event Stats ──────────────────────────────────────────────────────────────
 
-// Small avatar circle that shows the member's name in a tooltip on hover
 function AvatarBadge({ member, dotColor }: { member: RtMember; dotColor: string }) {
   const [hov, setHov] = useState(false)
   const color = memberColor(member.userId)
@@ -431,7 +385,6 @@ function EventStats({
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* Tooltip — avatar circles with name shown on hover of each circle */}
       {hovItem && hovItem.members.length > 0 && (
         <div style={{
           position: 'absolute',
@@ -483,7 +436,7 @@ function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-function EventDetails({ group, onEdit, darkMode }: { group: Group | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
+function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
   const c = th(darkMode)
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -491,8 +444,8 @@ function EventDetails({ group, onEdit, darkMode }: { group: Group | null; onEdit
   function startEdit(field: string, current: string) { setEditing(field); setDraft(current) }
   function save(field: string) { onEdit(field, draft); setEditing(null) }
 
-  const formatted = group?.eventTime
-    ? new Date(group.eventTime).toLocaleDateString('en-US', {
+  const formatted = event?.eventTime
+    ? new Date(event.eventTime).toLocaleDateString('en-US', {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
         hour: 'numeric', minute: '2-digit',
       })
@@ -511,8 +464,8 @@ function EventDetails({ group, onEdit, darkMode }: { group: Group | null; onEdit
             value={draft} onChange={e => setDraft(e.target.value)}
             onBlur={() => save('location')} onKeyDown={e => e.key === 'Enter' && save('location')} />
         ) : (
-          <span style={fieldText} onClick={() => startEdit('location', group?.location ?? '')}>
-            {group?.location ?? <span style={placeholder}>Add location…</span>}
+          <span style={fieldText} onClick={() => startEdit('location', event?.location ?? '')}>
+            {event?.location ?? <span style={placeholder}>Add location…</span>}
           </span>
         )}
       </div>
@@ -522,7 +475,7 @@ function EventDetails({ group, onEdit, darkMode }: { group: Group | null; onEdit
           <input autoFocus type="datetime-local" style={{ ...editInput, colorScheme: darkMode ? 'dark' : 'light' }}
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
         ) : (
-          <span style={fieldText} onClick={() => startEdit('eventTime', group?.eventTime ? group.eventTime.slice(0, 16) : '')}>
+          <span style={fieldText} onClick={() => startEdit('eventTime', event?.eventTime ? event.eventTime.slice(0, 16) : '')}>
             {formatted ?? <span style={placeholder}>Add date & time…</span>}
           </span>
         )}
@@ -533,8 +486,8 @@ function EventDetails({ group, onEdit, darkMode }: { group: Group | null; onEdit
           <textarea autoFocus rows={2} style={{ ...editInput, resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
         ) : (
-          <span style={{ ...fieldText, lineHeight: 1.5 }} onClick={() => startEdit('description', group?.description ?? '')}>
-            {group?.description ?? <span style={placeholder}>Add description…</span>}
+          <span style={{ ...fieldText, lineHeight: 1.5 }} onClick={() => startEdit('description', event?.description ?? '')}>
+            {event?.description ?? <span style={placeholder}>Add description…</span>}
           </span>
         )}
       </div>
@@ -644,10 +597,9 @@ function getMemberStatus(
   const hasSignal = comingScore >= 0.4 || notComingScore >= 0.4 || maybeScore >= 0.4
   if (!hasSignal) return 'not-responded'
 
-  // Whichever attendance signal is strongest wins
   if (notComingScore >= comingScore && notComingScore >= maybeScore) return 'not-coming'
   if (comingScore >= notComingScore && comingScore >= maybeScore)    return 'coming'
-  return 'not-responded' // maybe → treat as not-responded
+  return 'not-responded'
 }
 
 function memberRelevance(m: RtMember, emojiMap: Record<number, EmojiType>, attrs: Record<string, number>): number {
@@ -665,15 +617,82 @@ function memberRelevance(m: RtMember, emojiMap: Record<number, EmojiType>, attrs
 
 const RELEVANCE_THRESHOLD = 0.05
 
+// ─── Invite Panel ─────────────────────────────────────────────────────────────
+
+function InvitePanel({ groupId, darkMode, onClose }: { groupId: number; darkMode: boolean; onClose: () => void }) {
+  const c = th(darkMode)
+  const [phone, setPhone] = useState('')
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    setStatus(null)
+    try {
+      const res = await apiPost<{ user: { name: string } }>(`/groups/${groupId}/invite`, { phone })
+      setStatus({ ok: true, msg: `${res.user.name} added to group!` })
+      setPhone('')
+    } catch (err) {
+      setStatus({ ok: false, msg: err instanceof Error ? err.message : 'Failed to add user' })
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{
+      position: 'absolute', top: 'calc(100% + 8px)', left: 0,
+      background: c.panelBg, border: `1px solid ${c.border}`,
+      borderRadius: 14, padding: '16px',
+      boxShadow: darkMode ? '0 8px 28px rgba(0,0,0,0.4)' : '0 8px 28px rgba(0,0,0,0.12)',
+      width: 240, zIndex: 50,
+    }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: c.text, marginBottom: 10 }}>Add member by phone</div>
+      <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <input
+          type="tel"
+          placeholder="Phone number"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          required
+          style={{ borderRadius: 8, border: `1.5px solid ${c.border}`, padding: '7px 10px', fontSize: 13, color: c.text, background: c.inputBg, outline: 'none' }}
+        />
+        {status && (
+          <p style={{ margin: 0, fontSize: 12, color: status.ok ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+            {status.msg}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="submit" disabled={loading} style={{
+            flex: 1, background: GRAD, color: 'white', border: 'none', borderRadius: 8,
+            padding: '7px 0', fontSize: 13, fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1,
+          }}>
+            {loading ? '…' : 'Add'}
+          </button>
+          <button type="button" onClick={onClose} style={{
+            background: 'transparent', border: `1px solid ${c.border}`,
+            borderRadius: 8, padding: '7px 12px', fontSize: 13, color: c.textSub, cursor: 'pointer',
+          }}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function EventPage() {
   const [me, setMe] = useState<Me | null>(null)
   const [groups, setGroups] = useState<Group[]>([])
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
-  const [emojiMap, setEmojiMap] = useState<Record<number, EmojiType>>(MOCK_EMOJI_MAP)
-  const [roundtable, setRoundtable] = useState<Roundtable>(MOCK_ROUNDTABLE)
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES)
+  const [events, setEvents] = useState<Event[]>([])
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [emojiMap, setEmojiMap] = useState<Record<number, EmojiType>>({})
+  const [roundtable, setRoundtable] = useState<Roundtable>({ members: [] })
+  const [messages, setMessages] = useState<Message[]>([])
   const [feedMessages, setFeedMessages] = useState<FeedMessage[]>([])
   const [userAttrs, setUserAttrs] = useState<Record<string, number>>({})
   const [text, setText] = useState('')
@@ -687,8 +706,13 @@ export function EventPage() {
   const [suggestMsg, setSuggestMsg] = useState('')
   const [suggestLoading, setSuggestLoading] = useState(false)
   const [suggestError, setSuggestError] = useState('')
+  const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupLoading, setNewGroupLoading] = useState(false)
+  const [newGroupError, setNewGroupError] = useState('')
   const [smallView, setSmallView] = useState<'roundtable' | 'chat'>('chat')
   const [windowWidth, setWindowWidth] = useState(window.innerWidth)
+  const [showInvite, setShowInvite] = useState(false)
+  const inviteRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -714,6 +738,18 @@ export function EventPage() {
     return () => { document.documentElement.dataset.dark = '' }
   }, [darkMode])
 
+  // Close invite panel on outside click
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (inviteRef.current && !inviteRef.current.contains(e.target as Node)) {
+        setShowInvite(false)
+      }
+    }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  // Load me, emoji types on mount
   useEffect(() => {
     apiGet<Me>('/auth/me').then(me => {
       setMe(me)
@@ -721,27 +757,46 @@ export function EventPage() {
         .then(r => { const m: Record<string, number> = {}; r.attributes.forEach(a => m[a.key] = a.score); setUserAttrs(m) })
         .catch(() => {})
     }).catch(() => {})
-    apiGet<Group[]>('/groups').then(gs => {
-      setGroups(gs)
-      if (gs.length > 0) setSelectedGroup(gs[0])
-    }).catch(() => {})
     fetch(`${API_BASE}/emoji-types`)
       .then(r => r.json())
       .then((types: EmojiType[]) => { const m: Record<number, EmojiType> = {}; types.forEach(t => m[t.id] = t); setEmojiMap(m) })
       .catch(() => {})
   }, [])
 
+  // Load groups when me is available
+  useEffect(() => {
+    if (!me) return
+    apiGet<Group[]>('/groups').then(gs => {
+      setGroups(gs)
+      if (gs.length > 0) setSelectedGroup(gs[0])
+    }).catch(() => {})
+  }, [me])
+
+  // Load events when group changes
   useEffect(() => {
     if (!selectedGroup) return
-    const loadRT = () => apiGet<Roundtable>(`/roundtable?groupId=${selectedGroup.id}`).then(setRoundtable).catch(() => {})
-    const loadMsgs = () => apiGet<Message[]>(`/groups/${selectedGroup.id}/messages`).then(setMessages).catch(() => {})
-    const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/groups/${selectedGroup.id}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
+    setEvents([])
+    setSelectedEvent(null)
+    apiGet<Event[]>(`/groups/${selectedGroup.id}/events`).then(evts => {
+      setEvents(evts)
+      if (evts.length > 0) setSelectedEvent(evts[0])
+    }).catch(() => {})
+  }, [selectedGroup])
+
+  // Load roundtable, messages, websocket when event changes
+  useEffect(() => {
+    if (!selectedEvent) return
+    const eid = selectedEvent.id
+
+    const loadRT = () => apiGet<Roundtable>(`/roundtable?eventId=${eid}`).then(setRoundtable).catch(() => {})
+    const loadMsgs = () => apiGet<Message[]>(`/events/${eid}/messages`).then(setMessages).catch(() => {})
+    const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/events/${eid}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
 
     loadRT(); loadMsgs()
     if (me) loadFeed(me.userId)
 
     const wsUrl = API_BASE.replace(/^http/, 'ws')
-    const ws = new WebSocket(`${wsUrl}?groupId=${selectedGroup.id}`)
+    const ws = new WebSocket(`${wsUrl}?eventId=${eid}`)
     wsRef.current = ws
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data)
@@ -749,39 +804,56 @@ export function EventPage() {
       if (data.type === 'new_message') { setMessages(prev => [...prev, data.message]); if (me) loadFeed(me.userId) }
     }
     return () => { ws.close() }
-  }, [selectedGroup])
+  }, [selectedEvent])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, aiSorted])
 
   const sendMessage = async () => {
-    if (!text.trim() || !selectedGroup || !me) return
-    try { await apiPost('/messages', { groupId: selectedGroup.id, senderId: me.userId, content: text.trim() }); setText('') }
-    catch { /* silent */ }
-  }
-
-  const updateGroupField = async (field: string, value: string) => {
-    if (!selectedGroup) return
+    if (!text.trim() || !selectedEvent || !me) return
     try {
-      const updated = await apiPatch<Group>(`/groups/${selectedGroup.id}`, { [field]: value })
-      setSelectedGroup(updated)
-      setGroups(prev => prev.map(g => g.id === updated.id ? updated : g))
+      await apiPost('/messages', { eventId: selectedEvent.id, senderId: me.userId, content: text.trim() })
+      setText('')
     } catch { /* silent */ }
   }
 
-  const handleSuggestEvent = async () => {
-    if (!suggestName.trim() || !suggestMsg.trim() || !me) {
+  const updateEventField = async (field: string, value: string) => {
+    if (!selectedEvent) return
+    try {
+      const updated = await apiPatch<Event>(`/events/${selectedEvent.id}`, { [field]: value })
+      setSelectedEvent(updated)
+      setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
+    } catch { /* silent */ }
+  }
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim() || !me) { setNewGroupError('Enter a group name.'); return }
+    setNewGroupLoading(true)
+    setNewGroupError('')
+    try {
+      const group = await apiPost<Group>('/groups', { name: newGroupName.trim() })
+      setGroups(prev => [...prev, group])
+      setSelectedGroup(group)
+      setNewGroupName('')
+    } catch (err: unknown) {
+      setNewGroupError((err as Error)?.message ?? 'Failed to create group.')
+    }
+    setNewGroupLoading(false)
+  }
+
+  const handleCreateEvent = async () => {
+    if (!suggestName.trim() || !suggestMsg.trim() || !me || !selectedGroup) {
       setSuggestError('Please fill in both fields.')
       return
     }
     setSuggestLoading(true)
     setSuggestError('')
     try {
-      const group = await apiPost<Group>('/groups', { name: suggestName.trim() })
-      await apiPost('/messages', { groupId: group.id, senderId: me.userId, content: suggestMsg.trim() })
-      setGroups(prev => [...prev, group])
-      setSelectedGroup(group)
+      const event = await apiPost<Event>(`/groups/${selectedGroup.id}/events`, { name: suggestName.trim() })
+      await apiPost('/messages', { eventId: event.id, senderId: me.userId, content: suggestMsg.trim() })
+      setEvents(prev => [event, ...prev])
+      setSelectedEvent(event)
       setCurrentView('current')
       setSuggestName('')
       setSuggestMsg('')
@@ -811,27 +883,13 @@ export function EventPage() {
   const displayMessages = aiSorted
     ? (feedMessages.length > 0 ? feedMessages : [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
         .filter(m => m.sender.id !== me?.userId)
-        .reverse()  // least relevant at top, most relevant at bottom near input
+        .reverse()
     : [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
   const myRecentMessages = messages
     .filter(m => m.sender.id === me?.userId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 3)
-
-  const allEventItems = groups.length > 0
-    ? groups.map(g => ({
-        id: g.id,
-        name: g.name ?? `Event ${g.id}`,
-        subtitle: g.location || 'No location yet',
-      }))
-    : [{
-        id: 0,
-        name: selectedGroup?.name ?? 'Park Hangout',
-        subtitle: selectedGroup?.location || 'Demo event',
-      }]
-
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const c = th(darkMode)
 
@@ -848,28 +906,44 @@ export function EventPage() {
       padding: isSmall ? 8 : 16, boxSizing: 'border-box',
     }}>
 
-      {/* Top group header */}
+      {/* Top header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 4px', flexShrink: 0 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>{selectedGroup?.name ?? '—'}</div>
-        <button
-          type="button"
-          title="Invite members"
-          aria-label="Invite members"
-          style={{
-            marginLeft: 4, height: 36, width: 36, borderRadius: '50%',
-            border: `1px solid ${c.border}`, background: 'transparent',
-            color: c.textSub, cursor: 'pointer', flexShrink: 0, fontSize: 14,
-          }}
-        >
-          👤+
-        </button>
+        <div style={{ fontSize: 22, fontWeight: 700, color: c.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>
+          {selectedEvent?.name ?? (selectedGroup ? '—' : 'No group')}
+        </div>
+
+        {/* Invite button with panel */}
+        {selectedGroup && (
+          <div ref={inviteRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              title="Invite members"
+              onClick={() => setShowInvite(v => !v)}
+              style={{
+                height: 36, width: 36, borderRadius: '50%',
+                border: `1px solid ${c.border}`, background: showInvite ? c.muted : 'transparent',
+                color: c.textSub, cursor: 'pointer', flexShrink: 0, fontSize: 14,
+              }}
+            >
+              👤+
+            </button>
+            {showInvite && (
+              <InvitePanel
+                groupId={selectedGroup.id}
+                darkMode={darkMode}
+                onClose={() => setShowInvite(false)}
+              />
+            )}
+          </div>
+        )}
+
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 12, color: c.textSub, fontWeight: 500 }}>Dark Mode</span>
           <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
         </div>
       </div>
 
-      {/* Small-screen tab strip — toggles between roundtable and chat */}
+      {/* Small-screen tab strip */}
       {isSmall && (
         <div style={{
           display: 'flex', flexShrink: 0,
@@ -896,6 +970,7 @@ export function EventPage() {
       )}
 
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
+
       {/* ── Left — Round Table ── */}
       {(!isSmall || smallView === 'roundtable') && <div style={{
         flex: isSmall ? '1' : '0 0 clamp(380px, 46%, 660px)',
@@ -907,22 +982,53 @@ export function EventPage() {
         transition: 'background 0.2s',
       }}>
 
-        {/* Groups selector */}
-        <div className="mb-2 flex items-center gap-3">
-          <div className="relative">
+        {/* Group + Event selectors */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          {/* Group selector */}
+          <div style={{ position: 'relative' }}>
             <select
-              className="appearance-none pl-4 pr-8 py-1.5 text-sm text-white rounded-full cursor-pointer"
-              style={{ background: GRAD, border: 'none', outline: 'none' }}
+              style={{
+                appearance: 'none', paddingLeft: 12, paddingRight: 28, paddingTop: 6, paddingBottom: 6,
+                fontSize: 13, color: 'white', borderRadius: 20, cursor: 'pointer',
+                background: GRAD, border: 'none', outline: 'none',
+              }}
               value={selectedGroup?.id ?? ''}
-              onChange={e => { const g = groups.find(g => g.id === Number(e.target.value)); if (g) setSelectedGroup(g) }}
+              onChange={e => {
+                const g = groups.find(g => g.id === Number(e.target.value))
+                if (g) setSelectedGroup(g)
+              }}
             >
               <option value="">Select Group</option>
               {groups.map(g => (
-                <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name ?? `Group ${g.id}`}</option>
+                <option key={g.id} value={g.id} style={{ background: '#1e293b' }}>{g.name}</option>
               ))}
             </select>
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white text-xs pointer-events-none">▾</span>
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'white', fontSize: 9, pointerEvents: 'none' }}>▾</span>
           </div>
+
+          {/* Event selector — only shown if group is selected */}
+          {selectedGroup && (
+            <div style={{ position: 'relative' }}>
+              <select
+                style={{
+                  appearance: 'none', paddingLeft: 12, paddingRight: 28, paddingTop: 6, paddingBottom: 6,
+                  fontSize: 13, color: c.text, borderRadius: 20, cursor: 'pointer',
+                  background: c.muted, border: `1px solid ${c.border}`, outline: 'none',
+                }}
+                value={selectedEvent?.id ?? ''}
+                onChange={e => {
+                  const ev = events.find(ev => ev.id === Number(e.target.value))
+                  if (ev) setSelectedEvent(ev)
+                }}
+              >
+                <option value="">Select Event</option>
+                {events.map(ev => (
+                  <option key={ev.id} value={ev.id} style={{ background: '#1e293b', color: 'white' }}>{ev.name}</option>
+                ))}
+              </select>
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: c.textSub, fontSize: 9, pointerEvents: 'none' }}>▾</span>
+            </div>
+          )}
         </div>
 
         {/* Donut Ring */}
@@ -938,7 +1044,7 @@ export function EventPage() {
           />
         </div>
 
-        {/* Stats with tooltip */}
+        {/* Stats */}
         <EventStats
           coming={comingMembers.length}
           notResponded={notRespondedMembers.length}
@@ -952,8 +1058,8 @@ export function EventPage() {
         />
 
         {/* Event Details */}
-        <div className="mt-1 px-1">
-          <EventDetails group={selectedGroup} onEdit={updateGroupField} darkMode={darkMode} />
+        <div style={{ marginTop: 4, padding: '0 4px' }}>
+          <EventDetails event={selectedEvent} onEdit={updateEventField} darkMode={darkMode} />
         </div>
       </div>}
 
@@ -985,7 +1091,7 @@ export function EventPage() {
               flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
               background: currentView === 'current' ? c.muted : c.panelBg,
               color: currentView === 'current' ? c.text : c.textFaint,
-              border: 'none', cursor: 'pointer', borderRadius: '0 24px 0 0',
+              border: 'none', cursor: 'pointer',
               transition: 'background 0.15s, color 0.15s',
             }}
           >
@@ -1007,12 +1113,47 @@ export function EventPage() {
           </button>
         </div>
 
-        {/* ── Suggest Event form ── */}
+        {/* ── New Event form ── */}
         {currentView === 'suggest' && (
           <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', padding: '28px 32px', gap: 20 }}>
+
+            {/* ── New Group ── */}
+            <div style={{ borderRadius: 14, border: `1px solid ${c.border}`, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: c.text }}>New Group</h3>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={newGroupName}
+                  onChange={e => setNewGroupName(e.target.value)}
+                  placeholder="e.g. College Friends"
+                  onKeyDown={e => e.key === 'Enter' && handleCreateGroup()}
+                  style={{ flex: 1, borderRadius: 8, border: `1.5px solid ${c.border}`, padding: '8px 12px', fontSize: 13, color: c.text, outline: 'none', background: c.inputBg }}
+                  onFocus={e => (e.target.style.borderColor = '#93c5fd')}
+                  onBlur={e => (e.target.style.borderColor = c.border)}
+                />
+                <button
+                  onClick={handleCreateGroup}
+                  disabled={newGroupLoading || !me}
+                  style={{
+                    background: GRAD, color: 'white', border: 'none', borderRadius: 8,
+                    padding: '8px 16px', fontSize: 13, fontWeight: 600,
+                    cursor: (newGroupLoading || !me) ? 'not-allowed' : 'pointer',
+                    opacity: (newGroupLoading || !me) ? 0.7 : 1, whiteSpace: 'nowrap',
+                  }}
+                >
+                  {newGroupLoading ? '…' : 'Create'}
+                </button>
+              </div>
+              {newGroupError && <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{newGroupError}</p>}
+              {!me && <p style={{ margin: 0, fontSize: 12, color: c.textFaint }}>Sign in to create a group.</p>}
+            </div>
+
+            <div style={{ height: 1, background: c.border }} />
+
             <div>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: c.text }}>Suggest a New Event</h3>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: c.textFaint }}>Create a group and kick off the conversation.</p>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: c.text }}>New Event</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: c.textFaint }}>
+                {selectedGroup ? `Adding to "${selectedGroup.name}"` : 'Create or select a group first.'}
+              </p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: c.textSub }}>Event name</label>
@@ -1020,6 +1161,7 @@ export function EventPage() {
                 value={suggestName}
                 onChange={e => setSuggestName(e.target.value)}
                 placeholder="e.g. Park Hangout Saturday"
+                disabled={!selectedGroup}
                 style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 14px', fontSize: 14, color: c.text, outline: 'none', background: c.inputBg }}
                 onFocus={e => { (e.target as HTMLInputElement).style.borderColor = '#93c5fd' }}
                 onBlur={e => { (e.target as HTMLInputElement).style.borderColor = c.border }}
@@ -1032,6 +1174,7 @@ export function EventPage() {
                 onChange={e => setSuggestMsg(e.target.value)}
                 placeholder="e.g. Hey everyone! Who's down for a park hangout this Saturday at 3pm?"
                 rows={4}
+                disabled={!selectedGroup}
                 style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 14px', fontSize: 14, color: c.text, outline: 'none', background: c.inputBg, resize: 'none', fontFamily: 'inherit' }}
                 onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#93c5fd' }}
                 onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = c.border }}
@@ -1039,13 +1182,13 @@ export function EventPage() {
             </div>
             {suggestError && <p style={{ margin: 0, fontSize: 13, color: '#ef4444' }}>{suggestError}</p>}
             <button
-              onClick={handleSuggestEvent}
-              disabled={suggestLoading}
+              onClick={handleCreateEvent}
+              disabled={suggestLoading || !selectedGroup}
               style={{
                 background: GRAD, color: 'white', border: 'none', borderRadius: 12,
                 padding: '11px 24px', fontSize: 14, fontWeight: 600,
-                cursor: suggestLoading ? 'not-allowed' : 'pointer',
-                opacity: suggestLoading ? 0.7 : 1, alignSelf: 'flex-start',
+                cursor: (suggestLoading || !selectedGroup) ? 'not-allowed' : 'pointer',
+                opacity: (suggestLoading || !selectedGroup) ? 0.7 : 1, alignSelf: 'flex-start',
                 boxShadow: '0 2px 8px rgba(96,165,250,0.25)', transition: 'opacity 0.15s',
               }}
             >
@@ -1054,15 +1197,17 @@ export function EventPage() {
           </div>
         )}
 
-        {/* ── Current Events ── */}
+        {/* ── Current Event chat ── */}
         {currentView === 'current' && (
           <>
             <div style={{ padding: '16px 20px 12px', flexShrink: 0 }}>
               <div>
                 <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: c.text, lineHeight: 1.3 }}>
-                  {selectedGroup?.name ?? 'Park Hangout'}
+                  {selectedEvent?.name ?? (selectedGroup ? 'No events yet' : 'No group selected')}
                 </h2>
-                <p style={{ margin: '2px 0 0', fontSize: 12, color: c.textFaint }}>Group Chat</p>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: c.textFaint }}>
+                  {selectedGroup?.name ?? 'Select a group to get started'}
+                </p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
                 <span style={{ fontSize: 12, color: c.textSub }}>For You Filter</span>
@@ -1073,11 +1218,15 @@ export function EventPage() {
             <div style={{ height: 1, background: c.border, flexShrink: 0 }} />
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
-              {displayMessages.length === 0
-                ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>No messages yet</p>
-                : displayMessages.map(msg => (
-                    <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} darkMode={darkMode} />
-                  ))
+              {!selectedEvent
+                ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>
+                    {selectedGroup ? 'No events in this group yet. Create one with + New.' : 'Sign in and select a group to get started.'}
+                  </p>
+                : displayMessages.length === 0
+                  ? <p style={{ fontSize: 12, color: c.textFaint, textAlign: 'center', marginTop: 32 }}>No messages yet</p>
+                  : displayMessages.map(msg => (
+                      <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} darkMode={darkMode} />
+                    ))
               }
               <div ref={messagesEndRef} />
             </div>
@@ -1094,14 +1243,16 @@ export function EventPage() {
             <div style={{ flexShrink: 0, padding: '10px 16px', display: 'flex', gap: 10, alignItems: 'center', borderTop: `1px solid ${c.border}` }}>
               <input
                 style={{ flex: 1, borderRadius: 20, padding: '8px 16px', fontSize: 14, outline: 'none', background: c.inputBg, border: 'none', color: c.text }}
-                placeholder="Type a message..."
+                placeholder={selectedEvent && me ? 'Type a message...' : selectedEvent ? 'Sign in to send messages' : 'Select an event first'}
                 value={text}
+                disabled={!selectedEvent || !me}
                 onChange={e => setText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
               />
               <button
                 onClick={sendMessage}
-                style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', background: GRAD, border: 'none', cursor: 'pointer', color: 'white', fontWeight: 700, fontSize: 16 }}
+                disabled={!selectedEvent || !me}
+                style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', background: GRAD, border: 'none', cursor: (!selectedEvent || !me) ? 'not-allowed' : 'pointer', color: 'white', fontWeight: 700, fontSize: 16, opacity: (!selectedEvent || !me) ? 0.5 : 1 }}
               >
                 ↑
               </button>
@@ -1109,28 +1260,32 @@ export function EventPage() {
           </>
         )}
 
+        {/* ── All Events list ── */}
         {currentView === 'all' && (
           <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: c.text }}>All Events</h3>
-            <p style={{ marginTop: 4, marginBottom: 16, fontSize: 12, color: c.textFaint }}>Select an event in this group.</p>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: c.text }}>
+              {selectedGroup ? `Events in ${selectedGroup.name}` : 'All Events'}
+            </h3>
+            <p style={{ marginTop: 4, marginBottom: 16, fontSize: 12, color: c.textFaint }}>
+              {selectedGroup ? 'Click an event to view its chat.' : 'Select a group to see events.'}
+            </p>
+            {events.length === 0 && selectedGroup && (
+              <p style={{ fontSize: 12, color: c.textFaint }}>No events yet. Create one with + New.</p>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {allEventItems.map(event => (
+              {events.map(event => (
                 <button
                   key={event.id}
-                  onClick={() => {
-                    const group = groups.find(g => g.id === event.id)
-                    if (group) setSelectedGroup(group)
-                    setCurrentView('current')
-                  }}
+                  onClick={() => { setSelectedEvent(event); setCurrentView('current') }}
                   style={{
                     width: '100%', textAlign: 'left', borderRadius: 12,
-                    border: `1.5px solid ${selectedGroup?.id === event.id ? '#93c5fd' : c.border}`,
+                    border: `1.5px solid ${selectedEvent?.id === event.id ? '#93c5fd' : c.border}`,
                     padding: '10px 14px', cursor: 'pointer',
-                    background: selectedGroup?.id === event.id ? (darkMode ? '#1e3a5f' : '#eff6ff') : c.panelBg,
+                    background: selectedEvent?.id === event.id ? (darkMode ? '#1e3a5f' : '#eff6ff') : c.panelBg,
                   }}
                 >
                   <div style={{ fontSize: 14, fontWeight: 500, color: c.text }}>{event.name}</div>
-                  <div style={{ fontSize: 12, color: c.textFaint, marginTop: 2 }}>{event.subtitle}</div>
+                  <div style={{ fontSize: 12, color: c.textFaint, marginTop: 2 }}>{event.location || 'No location yet'}</div>
                 </button>
               ))}
             </div>
