@@ -55,7 +55,7 @@ const MOCK_MESSAGES: Message[] = [
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const GRAD = 'linear-gradient(135deg, #86efac 0%, #60a5fa 50%, #c084fc 100%)'
+const GRAD = 'linear-gradient(135deg, #5fa8ff 0%, #6a63ff 100%)'
 
 const MEMBER_COLORS = [
   '#3b82f6', '#10b981', '#f97316', '#8b5cf6',
@@ -424,26 +424,24 @@ function EventStats({
         </div>
       )}
 
-      <div className="flex items-center justify-center gap-5 py-2">
-        {items.map((item, i) => (
-          <>
-            {i > 0 && <div key={`sep-${i}`} style={{ width: 1, height: 14, background: '#e5e7eb' }} />}
-            <div
-              key={item.status}
-              className="flex items-center gap-1.5"
-              style={{
-                cursor: 'default',
-                opacity: hoveredStat && hoveredStat !== item.status ? 0.4 : 1,
-                transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={() => onStatHover(item.status)}
-              onMouseLeave={() => onStatHover(null)}
-            >
-              <div className="w-2 h-2 rounded-full" style={{ background: item.dotColor }} />
-              <span className="text-sm font-semibold text-slate-700">{item.count}</span>
-              <span className="text-sm text-slate-400">{item.label}</span>
-            </div>
-          </>
+      <div className="grid grid-cols-3 gap-3 py-2">
+        {items.map(item => (
+          <div
+            key={item.status}
+            className="flex items-center justify-center gap-2 rounded-xl border py-2.5"
+            style={{
+              cursor: 'default',
+              opacity: hoveredStat && hoveredStat !== item.status ? 0.4 : 1,
+              transition: 'opacity 0.15s',
+              borderColor: `${item.dotColor}80`,
+              background: `${item.dotColor}12`,
+            }}
+            onMouseEnter={() => onStatHover(item.status)}
+            onMouseLeave={() => onStatHover(null)}
+          >
+            <span className="text-[22px] font-semibold leading-none" style={{ color: item.dotColor }}>{item.count}</span>
+            <span className="text-base text-slate-500">{item.label}</span>
+          </div>
         ))}
       </div>
     </div>
@@ -467,9 +465,10 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
     : null
 
   return (
-    <div className="flex flex-col gap-2.5 text-sm">
-      <div className="flex gap-3 items-start">
+    <div className="flex flex-col gap-0 text-sm rounded-2xl border border-slate-100 bg-white overflow-hidden">
+      <div className="flex gap-3 items-start px-4 py-3 border-b border-slate-100">
         <span className="flex-shrink-0 text-slate-400 mt-0.5">📍</span>
+        <span className="w-16 text-slate-300">Location</span>
         {editing === 'location' ? (
           <input autoFocus className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
             value={draft} onChange={e => setDraft(e.target.value)}
@@ -481,8 +480,9 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
           </span>
         )}
       </div>
-      <div className="flex gap-3 items-start">
+      <div className="flex gap-3 items-start px-4 py-3 border-b border-slate-100">
         <span className="flex-shrink-0 text-slate-400 mt-0.5">🕐</span>
+        <span className="w-16 text-slate-300">Time</span>
         {editing === 'eventTime' ? (
           <input autoFocus type="datetime-local" className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent"
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
@@ -493,8 +493,9 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
           </span>
         )}
       </div>
-      <div className="flex gap-3 items-start">
+      <div className="flex gap-3 items-start px-4 py-3">
         <span className="flex-shrink-0 text-slate-400 mt-0.5">📄</span>
+        <span className="w-16 text-slate-300">Description</span>
         {editing === 'description' ? (
           <textarea autoFocus rows={2} className="flex-1 border-b border-blue-400 outline-none text-sm bg-transparent resize-none"
             value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
@@ -514,14 +515,14 @@ function EventDetails({ group, onEdit }: { group: Group | null; onEdit: (field: 
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button onClick={onToggle} style={{
-      position: 'relative', width: 36, height: 20, borderRadius: 10,
+      position: 'relative', width: 60, height: 36, borderRadius: 18,
       background: on ? GRAD : '#cbd5e1',
       border: 'none', cursor: 'pointer', flexShrink: 0,
       transition: 'background 0.2s',
     }}>
       <span style={{
-        position: 'absolute', width: 14, height: 14, borderRadius: '50%', background: 'white',
-        top: 3, left: on ? 19 : 3,
+        position: 'absolute', width: 28, height: 28, borderRadius: '50%', background: 'white',
+        top: 4, left: on ? 28 : 4,
         boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
         transition: 'left 0.2s',
       }} />
@@ -564,9 +565,11 @@ function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
       {!compact && (
-        <span style={{ fontSize: 11, fontWeight: 600, color, marginLeft: compact ? 0 : 40 }}>
-          {msg.sender.name}
-        </span>
+        <div style={{ marginLeft: 40, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 14, lineHeight: '10px', color }}>{'●'}</span>
+          <span style={{ fontSize: 14, lineHeight: '10px', color: '#0f172a', fontWeight: 600 }}>{msg.sender.name}</span>
+          <span style={{ fontSize: 11, color: '#a3aed0' }}>{time}</span>
+        </div>
       )}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
         {!compact && (
@@ -579,7 +582,7 @@ function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
           </div>
         )}
         <div style={{
-          background: '#f0f0f0', color: '#111827',
+          background: '#f4f6fb', color: '#334155',
           borderRadius: compact ? '14px 14px 14px 3px' : '4px 18px 18px 18px',
           padding: compact ? '5px 11px' : '9px 15px',
           maxWidth: '78%',
@@ -589,7 +592,7 @@ function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
           {msg.content}
         </div>
       </div>
-      <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: compact ? 0 : 40 }}>{time}</span>
+      {compact && <span style={{ fontSize: 10, color: '#9ca3af', marginLeft: compact ? 0 : 40 }}>{time}</span>}
     </div>
   )
 }
@@ -773,37 +776,20 @@ export function EventPage() {
       left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 1380,
       overflow: 'hidden',
-      background: darkMode ? '#0f172a' : '#f3f4f6',
+      background: darkMode ? '#0f172a' : '#f8f8fb',
       filter: darkMode ? 'brightness(0.7)' : 'none',
       transition: 'background 0.2s, filter 0.2s',
       zIndex: 0,
       display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 12,
-      padding: 16, boxSizing: 'border-box',
+      padding: 14, boxSizing: 'border-box',
     }}>
-
-      {/* Top group header */}
-      <div className="flex items-center gap-3 px-1">
-        <div className="text-2xl text-slate-900 font-bold">{selectedGroup?.name ?? '—'}</div>
-        <button
-          type="button"
-          title="Invite members"
-          aria-label="Invite members"
-          className="ml-1 h-9 w-9 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-        >
-          👤+
-        </button>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-slate-500 font-medium">Dark Mode</span>
-          <Toggle on={darkMode} onToggle={() => setDarkMode(v => !v)} />
-        </div>
-      </div>
 
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
       {/* ── Left — Round Table ── */}
       <div style={{
-        width: 660, flexShrink: 0, background: 'white',
+        width: 920, flexShrink: 0, background: 'white',
         borderRadius: 24, padding: '20px 20px 16px',
-        boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+        border: '1px solid #eef2f7',
         display: 'flex', flexDirection: 'column',
         boxSizing: 'border-box', overflow: 'hidden',
       }}>
@@ -812,7 +798,7 @@ export function EventPage() {
         <div className="mb-2 flex items-center gap-3">
           <div className="relative">
             <select
-              className="appearance-none pl-4 pr-8 py-1.5 text-sm text-white rounded-full cursor-pointer"
+              className="appearance-none pl-6 pr-10 py-3 text-sm text-white rounded-full cursor-pointer"
               style={{ background: GRAD, border: 'none', outline: 'none' }}
               value={selectedGroup?.id ?? ''}
               onChange={e => { const g = groups.find(g => g.id === Number(e.target.value)); if (g) setSelectedGroup(g) }}
@@ -824,6 +810,27 @@ export function EventPage() {
             </select>
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white text-xs pointer-events-none">▾</span>
           </div>
+          <button
+            type="button"
+            className="px-6 py-3 rounded-full text-sm border border-indigo-100 text-indigo-500 bg-indigo-50"
+          >
+            + Invite
+          </button>
+          <button
+            type="button"
+            className="ml-auto px-6 py-3 rounded-full text-sm border border-slate-200 text-slate-500 bg-white"
+          >
+            Polls
+          </button>
+          <button
+            type="button"
+            className="h-14 w-14 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-lg"
+            onClick={() => setDarkMode(v => !v)}
+            title="Dark mode"
+            aria-label="Dark mode"
+          >
+            ◐
+          </button>
         </div>
 
         {/* Donut Ring */}
@@ -859,32 +866,33 @@ export function EventPage() {
       {/* ── Right — Messaging ── */}
       <div style={{
         flex: 1, minWidth: 360, background: 'white',
-        borderRadius: 24, boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
+        borderRadius: 24, border: '1px solid #eef2f7',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
         boxSizing: 'border-box',
       }}>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', flexShrink: 0, borderBottom: '1px solid #f3f4f6' }}>
+        <div style={{ flexShrink: 0, padding: '14px 16px 10px' }}>
+          <div style={{ display: 'flex', background: '#f8fafc', borderRadius: 16, padding: 4 }}>
           <button
             onClick={() => setCurrentView('suggest')}
             style={{
-              flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: GRAD, color: 'white',
-              border: 'none', cursor: 'pointer', borderRadius: '24px 0 0 0',
-              opacity: currentView === 'suggest' ? 1 : 0.85,
-              transition: 'opacity 0.15s',
+              flex: 1, padding: '9px 10px', fontSize: 14, fontWeight: 500,
+              background: currentView === 'suggest' ? GRAD : 'transparent',
+              color: currentView === 'suggest' ? 'white' : '#64748b',
+              border: 'none', cursor: 'pointer', borderRadius: 12,
+              transition: 'background 0.15s, color 0.15s',
             }}
           >
-            + New
+            Suggest Event
           </button>
           <button
             onClick={() => setCurrentView('current')}
             style={{
-              flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'current' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'current' ? '#111827' : '#9ca3af',
-              border: 'none', cursor: 'pointer', borderRadius: '0 24px 0 0',
+              flex: 1, padding: '9px 10px', fontSize: 14, fontWeight: 500,
+              background: currentView === 'current' ? GRAD : 'transparent',
+              color: currentView === 'current' ? 'white' : '#64748b',
+              border: 'none', cursor: 'pointer', borderRadius: 12,
               transition: 'background 0.15s, color 0.15s',
             }}
           >
@@ -893,17 +901,17 @@ export function EventPage() {
           <button
             onClick={() => setCurrentView('all')}
             style={{
-              flex: 1, padding: '10px 16px', fontSize: 14, fontWeight: 500,
-              background: currentView === 'all' ? '#f3f4f6' : '#f9fafb',
-              color: currentView === 'all' ? '#111827' : '#9ca3af',
+              flex: 1, padding: '9px 10px', fontSize: 14, fontWeight: 500,
+              background: currentView === 'all' ? GRAD : 'transparent',
+              color: currentView === 'all' ? 'white' : '#64748b',
               border: 'none', cursor: 'pointer',
-              borderLeft: '1px solid #f3f4f6',
-              borderRadius: '0 24px 0 0',
+              borderRadius: 12,
               transition: 'background 0.15s, color 0.15s',
             }}
           >
             All Events
           </button>
+          </div>
         </div>
 
         {/* ── Suggest Event form ── */}
@@ -957,19 +965,20 @@ export function EventPage() {
         {currentView === 'current' && (
           <>
             <div className="px-5 pt-4 pb-3 flex-shrink-0">
-              <div>
+              <div className="flex items-center justify-between gap-2">
                 <h2 className="font-bold text-[22px] text-slate-800 leading-tight">
                   {selectedGroup?.name ?? 'Park Hangout'}
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">Group Chat</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">For-You</span>
+                  <Toggle on={aiSorted} onToggle={() => setAiSorted(v => !v)} />
+                </div>
               </div>
-              <div className="flex items-center gap-2 mt-2.5">
-                <span className="text-xs text-slate-500">For You Filter</span>
-                <Toggle on={aiSorted} onToggle={() => setAiSorted(v => !v)} />
-              </div>
+              <p className="text-xs text-slate-400 mt-0.5">Group Chat</p>
             </div>
 
             <div style={{ height: 1, background: '#f3f4f6', flexShrink: 0 }} />
+            <div className="px-5 py-3 text-slate-400 text-sm">✦ AI-sorted by relevancy</div>
 
             <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-3 min-h-0">
               {displayMessages.length === 0
