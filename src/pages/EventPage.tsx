@@ -111,7 +111,7 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
     if (hov) {
       centerContent = (
         <>
-          <div className="font-bold text-sm mb-1.5" style={{ color: memberColor(hov.userId) }}>
+          <div className="font-bold text-sm mb-1.5" style={{ color: memberColor(hov.userId), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
             {hov.name}
           </div>
           {hov.emojis.flatMap(e =>
@@ -147,8 +147,8 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
   }
 
   return (
-    <div className="relative flex-shrink-0" style={{ width: SVG_SIZE, height: SVG_SIZE }}>
-      <svg width={SVG_SIZE} height={SVG_SIZE}>
+    <div className="relative" style={{ width: '100%', maxWidth: SVG_SIZE, aspectRatio: '1 / 1' }}>
+      <svg viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} width="100%" height="100%" style={{ display: 'block' }}>
         <defs>
           {/* The same gradient used on the Groups selector, applied to the whole ring */}
           <linearGradient id="ringGrad" x1={CX - OUTER} y1={CY - OUTER} x2={CX + OUTER} y2={CY + OUTER} gradientUnits="userSpaceOnUse">
@@ -249,14 +249,17 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
           const pos = polar(AVATAR_R, midDeg)
           const color = memberColor(m.userId)
           const isHov = m.userId === hoveredMember
-          // Name badge: positioned radially outward from the avatar center so it
-          // always points away from the ring — never back toward or into the chart.
-          // 7px per char is generous enough for typical fonts at fontSize=9
-          const nameW = Math.max(m.name.length * 7 + 18, 36)
+          // Truncate long names so badges never overflow the SVG canvas
+          const MAX_LABEL = 10
+          const displayName = m.name.length > MAX_LABEL
+            ? m.name.slice(0, MAX_LABEL - 1) + '…'
+            : m.name
+          const nameW = Math.max(displayName.length * 7 + 18, 36)
           const nameH = 16
-          // Always place the badge directly below the avatar and keep it centered.
-          const nameY = pos.y + 22   // top of badge (avatar bottom + 2px gap)
-          const nameX = pos.x - nameW / 2
+          // Place badge below avatar, clamped so it never leaves the SVG bounds
+          const rawNameX = pos.x - nameW / 2
+          const nameX = Math.max(4, Math.min(SVG_SIZE - nameW - 4, rawNameX))
+          const nameY = pos.y + 22
 
           return (
             <g
@@ -283,7 +286,7 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
               >
                 {m.name[0].toUpperCase()}
               </text>
-              {/* Name badge — centered directly under avatar */}
+              {/* Name badge — clamped within SVG bounds */}
               <rect
                 x={nameX}
                 y={nameY}
@@ -300,23 +303,23 @@ function DonutRing({ members, emojiMap, hoveredMember, hoveredEmoji, onHover, on
                 fill="#4b5563" fontSize={9} fontWeight={600}
                 style={{ pointerEvents: 'none', userSelect: 'none' }}
               >
-                {m.name}
+                {displayName}
               </text>
             </g>
           )
         })}
       </svg>
 
-      {/* Center info overlay */}
+      {/* Center info overlay — sized as % of container so it scales with the SVG */}
       <div
         className="absolute pointer-events-none flex flex-col items-center justify-center text-center"
         style={{
           top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: (INNER - 6) * 2,
-          height: (INNER - 6) * 2,
+          width: `${((INNER - 6) * 2 / SVG_SIZE) * 100}%`,
+          height: `${((INNER - 6) * 2 / SVG_SIZE) * 100}%`,
           borderRadius: '50%',
-          padding: 14,
+          padding: '2.5%',
           overflow: 'hidden',
         }}
       >
@@ -358,7 +361,7 @@ function AvatarBadge({ member, dotColor }: { member: RtMember; dotColor: string 
           padding: '3px 8px', borderRadius: 6,
           whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 30,
         }}>
-          {member.name}
+          {member.name.length > 16 ? member.name.slice(0, 15) + '…' : member.name}
         </div>
       )}
     </div>
@@ -816,11 +819,11 @@ export function EventPage() {
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 16, minHeight: 0, flex: 1 }}>
       {/* ── Left — Round Table ── */}
       <div style={{
-        width: 660, flexShrink: 0, background: 'white',
+        flex: '0 0 clamp(380px, 46%, 660px)', background: 'white',
         borderRadius: 24, padding: '20px 20px 16px',
         boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
         display: 'flex', flexDirection: 'column',
-        boxSizing: 'border-box', overflow: 'hidden',
+        boxSizing: 'border-box', overflow: 'hidden', minHeight: 0,
       }}>
 
         {/* Groups selector */}
@@ -842,7 +845,7 @@ export function EventPage() {
         </div>
 
         {/* Donut Ring */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', maxHeight: 600, marginTop: -10 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden', marginTop: -10 }}>
           <DonutRing
             members={members}
             emojiMap={emojiMap}
@@ -873,7 +876,7 @@ export function EventPage() {
 
       {/* ── Right — Messaging ── */}
       <div style={{
-        flex: 1, minWidth: 360, background: 'white',
+        flex: 1, minWidth: 280, background: 'white',
         borderRadius: 24, boxShadow: '0 1px 8px rgba(0,0,0,0.07)',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
         boxSizing: 'border-box',
@@ -999,7 +1002,7 @@ export function EventPage() {
             {aiSorted && myRecentMessages.length > 0 && (
               <div className="flex-shrink-0 px-5 py-2.5" style={{ borderTop: '1px solid #f3f4f6', background: '#fafafa' }}>
                 <p className="text-xs font-semibold text-slate-400 mb-2">Your Recent Messages</p>
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5" style={{ maxHeight: 140, overflowY: 'auto' }}>
                   {myRecentMessages.map(msg => <MessageItem key={msg.id} msg={msg} meId={me?.userId ?? null} compact />)}
                 </div>
               </div>

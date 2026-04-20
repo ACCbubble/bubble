@@ -4,8 +4,7 @@ import './App.css'
 import { apiDelete, apiPost, apiGet } from './api'
 import { MessagesPage } from './pages/MessagesPage'
 import { PollsPage } from './pages/PollsPage'
-import { SignInPage } from './pages/SignInPage'
-import { SignUpPage } from './pages/SignUpPage'
+// SignInPage and SignUpPage are intentionally not rendered — routes redirect to /event
 import { TempUsernameAssignmentPage } from './pages/TempUsernameAssignment'
 import { MePage } from './pages/MePage'
 import { GroupsPage } from './pages/GroupsPage'
@@ -318,8 +317,8 @@ function App() {
         <main className="page">
           <Routes>
             <Route path="/" element={<Navigate to="/event" replace />} />
-            <Route path="/sign-in" element={<SignInPage />} />
-            <Route path="/sign-up" element={<SignUpPage />} />
+            <Route path="/sign-in" element={<Navigate to="/event" replace />} />
+            <Route path="/sign-up" element={<Navigate to="/event" replace />} />
             <Route path="/temp-username" element={<TempUsernameAssignmentPage />} />
             <Route path="/groups" element={<GroupsPage />} />
             <Route path="/messages" element={<MessagesPage />} />
