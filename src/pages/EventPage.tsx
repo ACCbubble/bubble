@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
-import { apiGet, apiPatch, apiPost } from '../api'
+import { apiGet, apiPost } from '../api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL as string
 
@@ -464,13 +464,8 @@ function EventStats({
 
 // ─── Event Details ────────────────────────────────────────────────────────────
 
-function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit: (field: string, value: string) => void; darkMode: boolean }) {
+function EventDetails({ event, darkMode }: { event: Event | null; darkMode: boolean }) {
   const c = th(darkMode)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-
-  function startEdit(field: string, current: string) { setEditing(field); setDraft(current) }
-  function save(field: string) { onEdit(field, draft); setEditing(null) }
 
   const formatted = event?.eventTime
     ? new Date(event.eventTime).toLocaleDateString('en-US', {
@@ -479,45 +474,28 @@ function EventDetails({ event, onEdit, darkMode }: { event: Event | null; onEdit
       })
     : null
 
-  const fieldText: React.CSSProperties = { color: c.text, fontSize: 13, cursor: 'pointer', transition: 'color 0.15s' }
+  const fieldText: React.CSSProperties = { color: c.text, fontSize: 13 }
   const placeholder: React.CSSProperties = { color: c.textFaint, fontStyle: 'italic', fontSize: 12 }
-  const editInput: React.CSSProperties = { flex: 1, borderBottom: `1.5px solid #60a5fa`, outline: 'none', fontSize: 13, background: 'transparent', color: c.text }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📍</span>
-        {editing === 'location' ? (
-          <input autoFocus style={editInput}
-            value={draft} onChange={e => setDraft(e.target.value)}
-            onBlur={() => save('location')} onKeyDown={e => e.key === 'Enter' && save('location')} />
-        ) : (
-          <span style={fieldText} onClick={() => startEdit('location', event?.location ?? '')}>
-            {event?.location ?? <span style={placeholder}>Add location…</span>}
-          </span>
-        )}
+        <span style={fieldText}>
+          {event?.location ?? <span style={placeholder}>Location will be chosen by poll…</span>}
+        </span>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>🕐</span>
-        {editing === 'eventTime' ? (
-          <input autoFocus type="datetime-local" style={{ ...editInput, colorScheme: darkMode ? 'dark' : 'light' }}
-            value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('eventTime')} />
-        ) : (
-          <span style={fieldText} onClick={() => startEdit('eventTime', event?.eventTime ? event.eventTime.slice(0, 16) : '')}>
-            {formatted ?? <span style={placeholder}>Add date & time…</span>}
-          </span>
-        )}
+        <span style={fieldText}>
+          {formatted ?? <span style={placeholder}>Date and time will be chosen by poll…</span>}
+        </span>
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
         <span style={{ flexShrink: 0, color: c.textSub, marginTop: 1 }}>📄</span>
-        {editing === 'description' ? (
-          <textarea autoFocus rows={2} style={{ ...editInput, resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
-            value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => save('description')} />
-        ) : (
-          <span style={{ ...fieldText, lineHeight: 1.5 }} onClick={() => startEdit('description', event?.description ?? '')}>
-            {event?.description ?? <span style={placeholder}>Add description…</span>}
-          </span>
-        )}
+        <span style={{ ...fieldText, lineHeight: 1.5 }}>
+          {event?.description ?? <span style={placeholder}>Activity description will be chosen by poll…</span>}
+        </span>
       </div>
     </div>
   )
@@ -955,6 +933,7 @@ export function EventPage() {
   const [creatingPoll, setCreatingPoll] = useState(false)
   const [votingPollId, setVotingPollId] = useState<number | null>(null)
   const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupInitialMessage, setNewGroupInitialMessage] = useState('')
   const [newGroupLoading, setNewGroupLoading] = useState(false)
   const [newGroupError, setNewGroupError] = useState('')
   const [smallView, setSmallView] = useState<'roundtable' | 'chat'>('chat')
@@ -1035,6 +1014,10 @@ export function EventPage() {
   async function loadSelectedEventData(event = selectedEvent, currentViewerId = viewerId) {
     if (!event) return
 
+    const loadEvent = apiGet<Event>(`/events/${event.id}`).then((freshEvent) => {
+      setSelectedEvent(freshEvent)
+      setEvents((current) => current.map((candidate) => candidate.id === freshEvent.id ? freshEvent : candidate))
+    }).catch(() => {})
     const loadRT = apiGet<Roundtable>(`/roundtable?eventId=${event.id}`).then(setRoundtable).catch(() => {})
     const loadMsgs = apiGet<Message[]>(
       `/events/${event.id}/messages${currentViewerId ? `?viewerUserId=${currentViewerId}` : ''}`,
@@ -1043,7 +1026,7 @@ export function EventPage() {
       ? apiGet<FeedMessage[]>(`/events/${event.id}/feed?userId=${currentViewerId}`).then(setFeedMessages).catch(() => {})
       : Promise.resolve()
 
-    await Promise.all([loadRT, loadMsgs, loadFeed])
+    await Promise.all([loadEvent, loadRT, loadMsgs, loadFeed])
   }
 
   const refreshSelectedEventData = useEffectEvent((event = selectedEvent, currentViewerId = viewerId) => {
@@ -1081,24 +1064,17 @@ export function EventPage() {
     } catch { /* silent */ }
   }
 
-  const updateEventField = async (field: string, value: string) => {
-    if (!selectedEvent) return
-    try {
-      const updated = await apiPatch<Event>(`/events/${selectedEvent.id}`, { [field]: value })
-      setSelectedEvent(updated)
-      setEvents(prev => prev.map(e => e.id === updated.id ? updated : e))
-    } catch { /* silent */ }
-  }
-
   const handleCreateGroup = async () => {
     if (!newGroupName.trim() || !me) { setNewGroupError('Enter a group name.'); return }
     setNewGroupLoading(true)
     setNewGroupError('')
     try {
-      const group = await apiPost<Group>('/groups', { name: newGroupName.trim() })
+      const group = await apiPost<Group>('/groups', { name: newGroupName.trim(), initialMessage: newGroupInitialMessage.trim() })
       setGroups(prev => [...prev, group])
       setSelectedGroup(group)
       setNewGroupName('')
+      setNewGroupInitialMessage('')
+      setCurrentView('current')
     } catch (err: unknown) {
       setNewGroupError((err as Error)?.message ?? 'Failed to create group.')
     }
@@ -1374,7 +1350,7 @@ export function EventPage() {
 
         {/* Event Details */}
         <div style={{ marginTop: 4, padding: '0 4px' }}>
-          <EventDetails event={selectedEvent} onEdit={updateEventField} darkMode={darkMode} />
+          <EventDetails event={selectedEvent} darkMode={darkMode} />
         </div>
       </div>}
 
@@ -1458,6 +1434,15 @@ export function EventPage() {
                   {newGroupLoading ? '…' : 'Create'}
                 </button>
               </div>
+              <textarea
+                value={newGroupInitialMessage}
+                onChange={e => setNewGroupInitialMessage(e.target.value)}
+                placeholder="Initial message. Ask questions here and Bubble will turn missing details into polls."
+                rows={4}
+                style={{ borderRadius: 10, border: `1.5px solid ${c.border}`, padding: '9px 12px', fontSize: 13, color: c.text, outline: 'none', background: c.inputBg, resize: 'none', fontFamily: 'inherit' }}
+                onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = '#93c5fd' }}
+                onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = c.border }}
+              />
               {newGroupError && <p style={{ margin: 0, fontSize: 12, color: '#ef4444' }}>{newGroupError}</p>}
               {!me && <p style={{ margin: 0, fontSize: 12, color: c.textFaint }}>Sign in to create a group.</p>}
             </div>
