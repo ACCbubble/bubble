@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { apiGet, apiPatch, apiPost } from '../api'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL as string
@@ -672,7 +672,33 @@ export function EventPage() {
 
   useEffect(() => {
     if (!selectedEvent) return
-    const loadRT = () => apiGet<Roundtable>(`/roundtable?eventId=${selectedEvent.id}`).then(setRoundtable).catch(() => setRoundtable(EMPTY_ROUNDTABLE))
+    const loadRT = async () => {
+      try {
+        const roundtableForEvent = await apiGet<Roundtable>(`/roundtable?eventId=${selectedEvent.id}`)
+        setRoundtable(roundtableForEvent)
+        return
+      } catch (err: unknown) {
+        if (!isNotFoundError(err)) {
+          setRoundtable(EMPTY_ROUNDTABLE)
+          return
+        }
+      }
+
+      try {
+        const roundtableForEventPath = await apiGet<Roundtable>(`/events/${selectedEvent.id}/roundtable`)
+        setRoundtable(roundtableForEventPath)
+        return
+      } catch (err: unknown) {
+        if (!isNotFoundError(err) || !selectedGroup) {
+          setRoundtable(EMPTY_ROUNDTABLE)
+          return
+        }
+      }
+
+      apiGet<Roundtable>(`/roundtable?groupId=${selectedGroup.id}`)
+        .then(setRoundtable)
+        .catch(() => setRoundtable(EMPTY_ROUNDTABLE))
+    }
     const loadMsgs = () => apiGet<Message[]>(`/events/${selectedEvent.id}/messages`).then(setMessages).catch(() => setMessages([]))
     const loadFeed = (uid: number) => apiGet<FeedMessage[]>(`/events/${selectedEvent.id}/feed?userId=${uid}`).then(setFeedMessages).catch(() => {})
 
@@ -688,7 +714,7 @@ export function EventPage() {
       if (data.type === 'new_message') { setMessages(prev => [...prev, data.message]); if (me) loadFeed(me.userId) }
     }
     return () => { ws.close() }
-  }, [selectedEvent, me])
+  }, [selectedEvent, selectedGroup, me])
 
   useEffect(() => {
     if (!aiSorted) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -759,7 +785,23 @@ export function EventPage() {
   }
 
   // ── Derived ──
-  const allMembers = roundtable.members
+  const fallbackRoundtableMembers = useMemo<RtMember[]>(() => {
+    const memberById = new Map<number, RtMember>()
+    for (const message of messages) {
+      if (memberById.has(message.sender.id)) continue
+      memberById.set(message.sender.id, {
+        userId: message.sender.id,
+        name: message.sender.name,
+        emojis: [],
+      })
+    }
+    if (me && !memberById.has(me.userId)) {
+      memberById.set(me.userId, { userId: me.userId, name: me.name, emojis: [] })
+    }
+    return Array.from(memberById.values())
+  }, [messages, me])
+
+  const allMembers = roundtable.members.length > 0 ? roundtable.members : fallbackRoundtableMembers
   const comingEmojiId = Object.values(emojiMap).find(e => e.name === 'coming')?.id ?? null
   const hasAttrs = Object.keys(userAttrs).length > 0
 
