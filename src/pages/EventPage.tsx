@@ -715,7 +715,13 @@ export function EventPage() {
 
   const sendMessage = async () => {
     if (!text.trim() || !selectedEvent || !me) return
-    try { await apiPost('/messages', { eventId: selectedEvent.id, senderId: me.userId, content: text.trim() }); setText('') }
+    try {
+      await apiPost(`/events/${selectedEvent.id}/messages`, {
+        senderId: me.userId,
+        content: text.trim(),
+      })
+      setText('')
+    }
     catch { /* silent */ }
   }
 
@@ -740,15 +746,20 @@ export function EventPage() {
     setSuggestLoading(true)
     setSuggestError('')
     try {
-      const event = await apiPost<Event>('/events', { groupId: selectedGroup.id, name: suggestName.trim() })
-      await apiPost('/messages', { eventId: event.id, senderId: me.userId, content: suggestMsg.trim() })
+      const event = await apiPost<Event>(`/groups/${selectedGroup.id}/events`, { name: suggestName.trim() })
+      await apiPost(`/events/${event.id}/messages`, { senderId: me.userId, content: suggestMsg.trim() })
       setEvents(prev => [...prev, event])
       setSelectedEvent(event)
       setCurrentView('current')
       setSuggestName('')
       setSuggestMsg('')
     } catch (err: unknown) {
-      setSuggestError((err as Error)?.message ?? 'Failed to create event.')
+      const errorMessage = (err as Error)?.message ?? 'Failed to create event.'
+      setSuggestError(
+        errorMessage.toLowerCase() === 'not found'
+          ? 'Could not create event because the event API endpoint was not found.'
+          : errorMessage
+      )
     }
     setSuggestLoading(false)
   }
