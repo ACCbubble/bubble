@@ -596,11 +596,23 @@ function MessageItem({ msg, meId, compact = false }: MessageItemProps) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getMemberStatus(member: RtMember, comingEmojiId: number | null): Status {
-  if (!comingEmojiId) return 'not-responded'
-  const e = member.emojis.find(e => e.emojiId === comingEmojiId)
-  if (!e) return 'not-responded'
-  return e.score >= 0.4 ? 'coming' : 'not-coming'
+function getMemberStatus(
+  member: RtMember,
+  comingEmojiId: number | null,
+  notComingEmojiId: number | null,
+  maybeEmojiId: number | null,
+): Status {
+  const comingScore    = comingEmojiId    ? (member.emojis.find(e => e.emojiId === comingEmojiId)?.score    ?? 0) : 0
+  const notComingScore = notComingEmojiId ? (member.emojis.find(e => e.emojiId === notComingEmojiId)?.score ?? 0) : 0
+  const maybeScore     = maybeEmojiId     ? (member.emojis.find(e => e.emojiId === maybeEmojiId)?.score     ?? 0) : 0
+
+  const hasSignal = comingScore >= 0.4 || notComingScore >= 0.4 || maybeScore >= 0.4
+  if (!hasSignal) return 'not-responded'
+
+  // Whichever attendance signal is strongest wins
+  if (notComingScore >= comingScore && notComingScore >= maybeScore) return 'not-coming'
+  if (comingScore >= notComingScore && comingScore >= maybeScore)    return 'coming'
+  return 'not-responded' // maybe → treat as not-responded
 }
 
 function memberRelevance(m: RtMember, emojiMap: Record<number, EmojiType>, attrs: Record<string, number>): number {
@@ -689,7 +701,7 @@ export function EventPage() {
   }, [selectedGroup])
 
   useEffect(() => {
-    if (!aiSorted) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, aiSorted])
 
   const sendMessage = async () => {
@@ -730,7 +742,9 @@ export function EventPage() {
 
   // ── Derived ──
   const allMembers = roundtable.members
-  const comingEmojiId = Object.values(emojiMap).find(e => e.name === 'coming')?.id ?? null
+  const comingEmojiId    = Object.values(emojiMap).find(e => e.name === 'coming')?.id    ?? null
+  const notComingEmojiId = Object.values(emojiMap).find(e => e.name === 'not_coming')?.id ?? null
+  const maybeEmojiId     = Object.values(emojiMap).find(e => e.name === 'maybe')?.id      ?? null
   const hasAttrs = Object.keys(userAttrs).length > 0
 
   const members = hasAttrs
@@ -739,13 +753,14 @@ export function EventPage() {
         .sort((a, b) => memberRelevance(b, emojiMap, userAttrs) - memberRelevance(a, emojiMap, userAttrs))
     : allMembers
 
-  const comingMembers       = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'coming')
-  const notRespondedMembers = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'not-responded')
-  const notComingMembers    = allMembers.filter(m => getMemberStatus(m, comingEmojiId) === 'not-coming')
+  const comingMembers       = allMembers.filter(m => getMemberStatus(m, comingEmojiId, notComingEmojiId, maybeEmojiId) === 'coming')
+  const notRespondedMembers = allMembers.filter(m => getMemberStatus(m, comingEmojiId, notComingEmojiId, maybeEmojiId) === 'not-responded')
+  const notComingMembers    = allMembers.filter(m => getMemberStatus(m, comingEmojiId, notComingEmojiId, maybeEmojiId) === 'not-coming')
 
   const displayMessages = aiSorted
     ? (feedMessages.length > 0 ? feedMessages : [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
         .filter(m => m.sender.id !== me?.userId)
+        .reverse()  // least relevant at top, most relevant at bottom near input
     : [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 
   const myRecentMessages = messages
